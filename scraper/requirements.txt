@@ -1,0 +1,14 @@
+scrapy>=2.11.2
+requests>=2.31.0
+supabase>=2.9.0
+python-dotenv>=1.0.0
+
+# Phase 2 dependencies (uncomment when needed)
+# playwright>=1.40.0
+# scrapy-playwright>=0.0.33
+# pytesseract>=0.3.13
+# pillow>=10.0.0
+# pdf2image>=1.17.0
+# celery>=5.3.6
+# redis>=5.0.1
+# scrapy-rotating-proxies>=0.6.2

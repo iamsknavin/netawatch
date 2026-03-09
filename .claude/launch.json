@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js (frontend)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Meilisearch (search)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["run", "--rm", "-p", "7700:7700", "getmeili/meilisearch:latest"],
+      "port": 7700
+    }
+  ]
+}

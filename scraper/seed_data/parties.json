@@ -1,0 +1,212 @@
+[
+  {
+    "name": "Bharatiya Janata Party",
+    "abbreviation": "BJP",
+    "founded_year": 1980,
+    "ideology": "Hindu nationalism, Social conservatism, Economic liberalism"
+  },
+  {
+    "name": "Indian National Congress",
+    "abbreviation": "INC",
+    "founded_year": 1885,
+    "ideology": "Social democracy, Centrism, Secularism, Indian nationalism"
+  },
+  {
+    "name": "Aam Aadmi Party",
+    "abbreviation": "AAP",
+    "founded_year": 2012,
+    "ideology": "Anti-corruption, Social democracy, Populism"
+  },
+  {
+    "name": "All India Trinamool Congress",
+    "abbreviation": "AITC",
+    "founded_year": 1998,
+    "ideology": "Social democracy, Populism, Bengali nationalism"
+  },
+  {
+    "name": "Dravida Munnetra Kazhagam",
+    "abbreviation": "DMK",
+    "founded_year": 1949,
+    "ideology": "Dravidian politics, Social justice, Secularism"
+  },
+  {
+    "name": "All India Anna Dravida Munnetra Kazhagam",
+    "abbreviation": "AIADMK",
+    "founded_year": 1972,
+    "ideology": "Dravidian politics, Social conservatism"
+  },
+  {
+    "name": "Samajwadi Party",
+    "abbreviation": "SP",
+    "founded_year": 1992,
+    "ideology": "Democratic socialism, Social justice, Secularism"
+  },
+  {
+    "name": "Bahujan Samaj Party",
+    "abbreviation": "BSP",
+    "founded_year": 1984,
+    "ideology": "Bahujan movement, Social justice, Ambedkarism"
+  },
+  {
+    "name": "Nationalist Congress Party",
+    "abbreviation": "NCP",
+    "founded_year": 1999,
+    "ideology": "Social democracy, Nationalism, Secularism"
+  },
+  {
+    "name": "Nationalist Congress Party (Sharadchandra Pawar)",
+    "abbreviation": "NCP(SP)",
+    "founded_year": 2023,
+    "ideology": "Social democracy, Nationalism, Secularism"
+  },
+  {
+    "name": "Shiv Sena",
+    "abbreviation": "SS",
+    "founded_year": 1966,
+    "ideology": "Hindu nationalism, Marathi sub-nationalism"
+  },
+  {
+    "name": "Shiv Sena (Uddhav Balasaheb Thackeray)",
+    "abbreviation": "SSUBT",
+    "founded_year": 2022,
+    "ideology": "Hindu nationalism, Marathi sub-nationalism, Social liberalism"
+  },
+  {
+    "name": "Janata Dal (United)",
+    "abbreviation": "JDU",
+    "founded_year": 2003,
+    "ideology": "Social conservatism, Federalism"
+  },
+  {
+    "name": "Telugu Desam Party",
+    "abbreviation": "TDP",
+    "founded_year": 1982,
+    "ideology": "Telugu sub-nationalism, Liberalism"
+  },
+  {
+    "name": "YSR Congress Party",
+    "abbreviation": "YSRCP",
+    "founded_year": 2011,
+    "ideology": "Social democracy, Populism"
+  },
+  {
+    "name": "Bharat Rashtra Samithi",
+    "abbreviation": "BRS",
+    "founded_year": 2001,
+    "ideology": "Telangana sub-nationalism, Social democracy"
+  },
+  {
+    "name": "Communist Party of India",
+    "abbreviation": "CPI",
+    "founded_year": 1920,
+    "ideology": "Communism, Marxism, Secularism"
+  },
+  {
+    "name": "Communist Party of India (Marxist)",
+    "abbreviation": "CPM",
+    "founded_year": 1964,
+    "ideology": "Communism, Marxism-Leninism, Secularism"
+  },
+  {
+    "name": "Rashtriya Janata Dal",
+    "abbreviation": "RJD",
+    "founded_year": 1997,
+    "ideology": "Social democracy, Social justice, Secularism"
+  },
+  {
+    "name": "Janata Dal (Secular)",
+    "abbreviation": "JDS",
+    "founded_year": 1999,
+    "ideology": "Agrarianism, Social democracy"
+  },
+  {
+    "name": "All India Majlis-e-Ittehadul Muslimeen",
+    "abbreviation": "AIMIM",
+    "founded_year": 1927,
+    "ideology": "Islamic democracy, Social conservatism"
+  },
+  {
+    "name": "Indian Union Muslim League",
+    "abbreviation": "IUML",
+    "founded_year": 1948,
+    "ideology": "Islamic democracy, Secularism"
+  },
+  {
+    "name": "Apna Dal (Sonelal)",
+    "abbreviation": "ADAL",
+    "founded_year": 1995,
+    "ideology": "Social justice, Kurmi interests"
+  },
+  {
+    "name": "Rashtriya Lok Dal",
+    "abbreviation": "RLD",
+    "founded_year": 1996,
+    "ideology": "Agrarianism, Social democracy, Jat interests"
+  },
+  {
+    "name": "Pattali Makkal Katchi",
+    "abbreviation": "PMK",
+    "founded_year": 1989,
+    "ideology": "Vanniyar interests, Social conservatism"
+  },
+  {
+    "name": "Viduthalai Chiruthaigal Katchi",
+    "abbreviation": "VCK",
+    "founded_year": 1999,
+    "ideology": "Dalit rights, Social justice, Ambedkarism"
+  },
+  {
+    "name": "Marumalarchi Dravida Munnetra Kazhagam",
+    "abbreviation": "MDMK",
+    "founded_year": 1994,
+    "ideology": "Dravidian politics, Tamil nationalism"
+  },
+  {
+    "name": "Asom Gana Parishad",
+    "abbreviation": "AGP",
+    "founded_year": 1985,
+    "ideology": "Assamese nationalism, Social conservatism"
+  },
+  {
+    "name": "All India Forward Bloc",
+    "abbreviation": "AIFB",
+    "founded_year": 1939,
+    "ideology": "Left-wing nationalism, Democratic socialism"
+  },
+  {
+    "name": "Revolutionary Socialist Party",
+    "abbreviation": "RSP",
+    "founded_year": 1940,
+    "ideology": "Democratic socialism, Marxism"
+  },
+  {
+    "name": "Communist Party of India (Marxist-Leninist) Liberation",
+    "abbreviation": "CPIML",
+    "founded_year": 1974,
+    "ideology": "Marxism-Leninism, Land rights"
+  },
+  {
+    "name": "Naga People's Front",
+    "abbreviation": "NPF",
+    "founded_year": 2002,
+    "ideology": "Naga nationalism, Social conservatism"
+  },
+  {
+    "name": "Mizo National Front",
+    "abbreviation": "MNF",
+    "founded_year": 1961,
+    "ideology": "Mizo nationalism, Social conservatism"
+  },
+  {
+    "name": "Sikkim Democratic Front",
+    "abbreviation": "SDF",
+    "founded_year": 1993,
+    "ideology": "Regional interests, Conservatism"
+  },
+  {
+    "name": "Independent",
+    "abbreviation": "IND",
+    "founded_year": null,
+    "ideology": "Non-partisan"
+  }
+]

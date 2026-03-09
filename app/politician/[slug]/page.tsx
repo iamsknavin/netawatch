@@ -1,0 +1,599 @@
+import { notFound } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { createServerClient } from "@/lib/supabase";
+import {
+  formatIndianCurrency,
+  formatDate,
+  formatPercent,
+} from "@/lib/formatters";
+import { HOUSE_LABELS, CASE_STATUS_COLORS } from "@/lib/utils";
+import { PartyBadge } from "@/components/politician/PartyBadge";
+import { CasesBadge } from "@/components/politician/CasesBadge";
+import { WealthBar } from "@/components/politician/WealthBar";
+import { DataSourceTag } from "@/components/ui/DataSourceTag";
+import { PhaseStub } from "@/components/ui/PhaseStub";
+import type { PoliticianProfile } from "@/types";
+
+export const revalidate = 86400;
+
+async function getPolitician(slug: string): Promise<PoliticianProfile | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("politicians")
+    .select(
+      `
+      *,
+      parties (*),
+      assets_declarations (*),
+      criminal_cases (*),
+      election_terms (*),
+      attendance_records (*),
+      company_interests (*),
+      corruption_signals (*),
+      controversies (*)
+    `
+    )
+    .eq("slug", slug)
+    .single();
+
+  return data as PoliticianProfile | null;
+}
+
+export async function generateStaticParams() {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("politicians")
+    .select("slug")
+    .eq("is_active", true);
+  return (data ?? []).map((p) => ({ slug: p.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const p = await getPolitician(slug);
+  if (!p) return { title: "Politician not found" };
+  return {
+    title: p.name,
+    description: `${p.name} — ${(p.parties as { name: string } | null)?.name ?? "Independent"} · ${p.constituency ?? p.state} · Criminal cases, assets, and parliamentary record.`,
+  };
+}
+
+export default async function PoliticianProfilePage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const p = await getPolitician(slug);
+  if (!p) notFound();
+
+  const party = p.parties as { name: string; abbreviation: string | null; logo_url: string | null } | null;
+  const latestAssets = [...p.assets_declarations]
+    .sort((a, b) => b.declaration_year - a.declaration_year)[0] ?? null;
+  const heinousCases = p.criminal_cases.filter((c) => c.is_heinous);
+  const houseLabel = HOUSE_LABELS[p.house ?? ""] ?? p.house;
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Breadcrumb */}
+      <nav className="font-mono text-2xs text-text-muted mb-6">
+        <Link href="/" className="hover:text-text-primary transition-colors">Home</Link>
+        <span className="mx-2">›</span>
+        <Link href="/politicians" className="hover:text-text-primary transition-colors">MPs</Link>
+        <span className="mx-2">›</span>
+        <span className="text-text-secondary">{p.name}</span>
+      </nav>
+
+      {/* Profile header */}
+      <div className="bg-surface border border-border rounded-sm p-6 mb-6">
+        <div className="flex gap-6">
+          {/* Photo */}
+          <div className="shrink-0">
+            {p.profile_image_url ? (
+              <Image
+                src={p.profile_image_url}
+                alt={p.name}
+                width={96}
+                height={96}
+                className="w-24 h-24 object-cover rounded-sm"
+                unoptimized
+              />
+            ) : (
+              <div className="w-24 h-24 bg-surface-2 rounded-sm flex items-center justify-center border border-border">
+                <span className="font-mono text-4xl text-text-muted">
+                  {p.name.charAt(0)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-start gap-2 mb-2">
+              <h1 className="font-bold text-2xl text-text-primary">{p.name}</h1>
+              {heinousCases.length > 0 && (
+                <span className="bg-danger/20 border border-danger/50 text-danger font-mono text-2xs px-2 py-0.5 rounded-sm self-center">
+                  HEINOUS OFFENCES
+                </span>
+              )}
+            </div>
+
+            {p.name_hindi && (
+              <p className="text-text-secondary text-sm mb-2">{p.name_hindi}</p>
+            )}
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              <PartyBadge party={party} />
+              {houseLabel && (
+                <span className="font-mono text-2xs border border-border px-1.5 py-0.5 text-text-secondary rounded-sm">
+                  {houseLabel}
+                </span>
+              )}
+            </div>
+
+            {(p.constituency || p.state) && (
+              <p className="text-sm text-text-secondary font-mono mb-3">
+                {p.constituency}
+                {p.constituency && p.state && " · "}
+                {p.state}
+              </p>
+            )}
+
+            {/* Quick stats */}
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div>
+                <span className="text-text-muted text-xs font-mono">Net Worth</span>
+                <p className="font-mono text-accent font-semibold">
+                  {formatIndianCurrency(latestAssets?.net_worth ?? null)}
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted text-xs font-mono">Criminal Cases</span>
+                <p className="mt-0.5">
+                  <CasesBadge
+                    count={p.criminal_cases.length}
+                    hasHeinous={heinousCases.length > 0}
+                  />
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted text-xs font-mono">Terms</span>
+                <p className="font-mono text-text-primary font-semibold">
+                  {p.election_terms.length}
+                </p>
+              </div>
+              {p.attendance_records[0]?.attendance_percent !== undefined && (
+                <div>
+                  <span className="text-text-muted text-xs font-mono">Attendance</span>
+                  <p className="font-mono text-text-primary font-semibold">
+                    {formatPercent(p.attendance_records[0].attendance_percent)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab content (server-rendered, hash-based switching via CSS) */}
+      <TabLayout
+        p={p}
+        party={party}
+        latestAssets={latestAssets}
+        heinousCases={heinousCases}
+        houseLabel={houseLabel}
+      />
+    </div>
+  );
+}
+
+// Split into a sub-component to keep the page function readable
+function TabLayout({
+  p,
+  party,
+  latestAssets,
+  heinousCases,
+  houseLabel,
+}: {
+  p: PoliticianProfile;
+  party: { name: string; abbreviation: string | null; logo_url: string | null } | null;
+  latestAssets: PoliticianProfile["assets_declarations"][0] | null;
+  heinousCases: PoliticianProfile["criminal_cases"];
+  houseLabel: string | null;
+}) {
+  return (
+    <div>
+      {/* Tab navigation */}
+      <div className="flex overflow-x-auto border-b border-border mb-6 gap-0">
+        {[
+          { id: "wealth", label: "Wealth & Assets" },
+          { id: "cases", label: `Cases (${p.criminal_cases.length})` },
+          { id: "elections", label: `Elections (${p.election_terms.length})` },
+          { id: "performance", label: "Parliament" },
+          { id: "companies", label: "Companies" },
+          { id: "controversies", label: "Controversies" },
+        ].map((tab) => (
+          <a
+            key={tab.id}
+            href={`#${tab.id}`}
+            className="shrink-0 font-mono text-xs text-text-secondary px-4 py-3 border-b-2 border-transparent hover:text-text-primary hover:border-border transition-colors"
+          >
+            {tab.label}
+          </a>
+        ))}
+      </div>
+
+      {/* Tab 1: Wealth */}
+      <section id="wealth" className="mb-16 scroll-mt-20">
+        <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
+          Wealth & Assets
+        </h2>
+
+        {latestAssets ? (
+          <div className="space-y-6">
+            {/* Hero net worth */}
+            <div className="bg-surface border border-border p-6 rounded-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="font-mono text-2xs text-text-muted uppercase tracking-widest">
+                    Net Worth ({latestAssets.declaration_year})
+                  </p>
+                  <p className="font-mono text-4xl font-bold text-accent mt-1">
+                    {formatIndianCurrency(latestAssets.net_worth, false)}
+                  </p>
+                </div>
+                <DataSourceTag
+                  source={latestAssets.source_type ?? "myneta"}
+                  url={latestAssets.source_url ?? undefined}
+                />
+              </div>
+              <WealthBar
+                totalAssets={latestAssets.total_assets}
+                totalLiabilities={latestAssets.total_liabilities}
+              />
+            </div>
+
+            {/* Breakdown table */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Movable assets */}
+              <div className="bg-surface border border-border rounded-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-border bg-surface-2">
+                  <h3 className="font-mono text-xs text-text-secondary uppercase tracking-widest">
+                    Movable Assets
+                  </h3>
+                  <p className="font-mono text-sm text-accent font-semibold mt-0.5">
+                    {formatIndianCurrency(latestAssets.total_movable_assets)}
+                  </p>
+                </div>
+                <table className="data-table w-full">
+                  <tbody>
+                    {[
+                      ["Cash in hand", latestAssets.cash_in_hand],
+                      ["Bank deposits", latestAssets.bank_deposits],
+                      ["Bonds & debentures", latestAssets.bonds_debentures],
+                      ["NSC / Postal", latestAssets.nsc_postal],
+                      ["LIC policies", latestAssets.lic_policies],
+                      ["Loans given", latestAssets.personal_loans_given],
+                      ["Motor vehicles", latestAssets.motor_vehicles],
+                      ["Jewelry & gold", latestAssets.jewelry_gold],
+                      ["Other movable", latestAssets.other_movable],
+                    ]
+                      .filter(([, v]) => v !== null)
+                      .map(([label, value]) => (
+                        <tr key={String(label)}>
+                          <td className="text-text-secondary text-xs">{label}</td>
+                          <td className="text-right font-mono text-xs">
+                            {formatIndianCurrency(value as number)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Immovable assets */}
+              <div className="bg-surface border border-border rounded-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-border bg-surface-2">
+                  <h3 className="font-mono text-xs text-text-secondary uppercase tracking-widest">
+                    Immovable Assets
+                  </h3>
+                  <p className="font-mono text-sm text-accent font-semibold mt-0.5">
+                    {formatIndianCurrency(latestAssets.total_immovable_assets)}
+                  </p>
+                </div>
+                <table className="data-table w-full">
+                  <tbody>
+                    {[
+                      ["Agricultural land", latestAssets.agricultural_land],
+                      ["Non-agricultural land", latestAssets.non_agricultural_land],
+                      ["Buildings", latestAssets.buildings],
+                      ["Other immovable", latestAssets.other_immovable],
+                    ]
+                      .filter(([, v]) => v !== null)
+                      .map(([label, value]) => (
+                        <tr key={String(label)}>
+                          <td className="text-text-secondary text-xs">{label}</td>
+                          <td className="text-right font-mono text-xs">
+                            {formatIndianCurrency(value as number)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* YoY stub */}
+            {p.assets_declarations.length < 2 && (
+              <div className="border border-dashed border-border p-4 rounded-sm text-center">
+                <p className="font-mono text-2xs text-text-muted">
+                  Year-over-year comparison — data for previous elections coming soon
+                </p>
+              </div>
+            )}
+
+            {/* Source */}
+            {latestAssets.raw_affidavit_url && (
+              <a
+                href={latestAssets.raw_affidavit_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-xs font-mono text-text-secondary hover:text-accent transition-colors border border-border px-3 py-2 rounded-sm"
+              >
+                View original ECI affidavit ↗
+              </a>
+            )}
+          </div>
+        ) : (
+          <div className="border border-dashed border-border p-8 text-center rounded-sm">
+            <p className="font-mono text-text-secondary text-sm">
+              Asset declaration data not yet available
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Tab 2: Criminal Cases */}
+      <section id="cases" className="mb-16 scroll-mt-20">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest">
+            Criminal Cases
+          </h2>
+          <CasesBadge
+            count={p.criminal_cases.length}
+            hasHeinous={heinousCases.length > 0}
+          />
+        </div>
+
+        {p.criminal_cases.length === 0 ? (
+          <div className="bg-safe/5 border border-safe/30 p-6 rounded-sm text-center">
+            <p className="font-mono text-safe text-sm">
+              ✓ No criminal cases declared
+            </p>
+            <DataSourceTag source="myneta" className="mt-2" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {heinousCases.length > 0 && (
+              <div className="bg-danger/10 border border-danger/40 p-3 rounded-sm mb-4">
+                <p className="font-mono text-danger text-xs font-semibold">
+                  ⚠ Heinous offences declared: murder, rape, kidnapping, or major financial fraud
+                </p>
+              </div>
+            )}
+
+            {p.criminal_cases.map((c) => (
+              <div
+                key={c.id}
+                className={`bg-surface border rounded-sm p-4 ${
+                  c.is_heinous ? "border-danger/40" : "border-border"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(c.ipc_sections ?? []).map((section) => (
+                      <span
+                        key={section}
+                        className="font-mono text-2xs bg-surface-2 border border-border px-1.5 py-0.5 rounded-sm text-text-secondary"
+                      >
+                        §{section}
+                      </span>
+                    ))}
+                    {c.is_heinous && (
+                      <span className="font-mono text-2xs bg-danger/20 border border-danger/50 text-danger px-1.5 py-0.5 rounded-sm">
+                        HEINOUS
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`font-mono text-2xs px-2 py-0.5 border rounded-sm shrink-0 ${
+                      CASE_STATUS_COLORS[c.current_status ?? "unknown"]
+                    }`}
+                  >
+                    {c.current_status ?? "unknown"}
+                  </span>
+                </div>
+
+                {c.case_description && (
+                  <p className="text-xs text-text-secondary mb-2 leading-relaxed">
+                    {c.case_description}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-4 text-2xs font-mono text-text-muted">
+                  {c.court_name && <span>{c.court_name}</span>}
+                  {c.date_of_filing && (
+                    <span>Filed: {formatDate(c.date_of_filing)}</span>
+                  )}
+                  {c.case_year && <span>Year: {c.case_year}</span>}
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  {c.source_url && (
+                    <DataSourceTag source="myneta" url={c.source_url} />
+                  )}
+                  {/* eCourts Phase 3 stub */}
+                  <span className="font-mono text-2xs text-text-muted border border-border/30 px-1.5 py-0.5 rounded-sm opacity-50">
+                    eCourts live — Phase 3
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Tab 3: Election History */}
+      <section id="elections" className="mb-16 scroll-mt-20">
+        <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
+          Election History
+        </h2>
+
+        {p.election_terms.length === 0 ? (
+          <div className="border border-dashed border-border p-8 text-center rounded-sm">
+            <p className="font-mono text-text-secondary text-sm">
+              Election history not yet available
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {[...p.election_terms]
+              .sort((a, b) => b.election_year - a.election_year)
+              .map((term) => (
+                <div
+                  key={term.id}
+                  className={`bg-surface border rounded-sm p-4 flex items-center justify-between gap-4 ${
+                    term.result === "won"
+                      ? "border-safe/30"
+                      : "border-border"
+                  }`}
+                >
+                  <div>
+                    <p className="font-mono text-sm text-text-primary font-semibold">
+                      {term.election_year}
+                    </p>
+                    <p className="text-xs text-text-secondary font-mono">
+                      {term.constituency ?? "N/A"} · {term.state ?? ""}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {term.votes_received !== null && (
+                      <p className="font-mono text-xs text-text-secondary">
+                        {term.votes_received.toLocaleString("en-IN")} votes
+                      </p>
+                    )}
+                    {term.margin !== null && (
+                      <p className="font-mono text-2xs text-text-muted">
+                        margin: {term.margin.toLocaleString("en-IN")}
+                      </p>
+                    )}
+                    <span
+                      className={`font-mono text-2xs px-2 py-0.5 border rounded-sm mt-1 inline-block ${
+                        term.result === "won"
+                          ? "bg-safe/10 text-safe border-safe/30"
+                          : "bg-danger/10 text-danger border-danger/30"
+                      }`}
+                    >
+                      {term.result ?? "N/A"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+
+      {/* Tab 4: Parliamentary Performance */}
+      <section id="performance" className="mb-16 scroll-mt-20">
+        <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
+          Parliamentary Performance
+        </h2>
+
+        {p.attendance_records.length > 0 ? (
+          <div className="space-y-4">
+            {p.attendance_records.map((rec) => (
+              <div
+                key={rec.id}
+                className="bg-surface border border-border rounded-sm p-4"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <p className="font-mono text-sm font-semibold">
+                    {rec.session_name ?? rec.session_year}
+                  </p>
+                  {rec.source_url && (
+                    <DataSourceTag source="prs" url={rec.source_url} />
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                  {[
+                    ["Attendance", formatPercent(rec.attendance_percent)],
+                    ["Days Present", `${rec.days_present ?? "?"}/${rec.total_days ?? "?"}`],
+                    ["Questions", rec.questions_asked?.toLocaleString("en-IN") ?? "—"],
+                    ["Debates", rec.debates_participated?.toLocaleString("en-IN") ?? "—"],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="font-mono text-2xs text-text-muted uppercase tracking-widest">
+                        {label}
+                      </p>
+                      <p className="font-mono text-sm text-accent font-semibold mt-1">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border border-dashed border-border p-8 text-center rounded-sm">
+            <p className="font-mono text-text-secondary text-sm mb-1">
+              Parliamentary data not yet available
+            </p>
+            <p className="text-2xs text-text-muted font-mono">
+              PRS India scraper coming in Phase 2
+            </p>
+          </div>
+        )}
+
+        {/* MPLAD stub */}
+        <div className="mt-6">
+          <PhaseStub
+            phase={3}
+            feature="MPLAD Fund Usage"
+            description="Track how this MP spends their ₹5 Cr annual MPLAD development fund — project-wise allocation and utilization."
+          />
+        </div>
+      </section>
+
+      {/* Tab 5: Companies (Phase 2) */}
+      <section id="companies" className="mb-16 scroll-mt-20">
+        <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
+          Company Interests & Government Tenders
+        </h2>
+        <PhaseStub
+          phase={2}
+          feature="Company Interests & Tender Tracking"
+          description="Cross-reference this MP's declared company directorships and shareholdings with MCA21 data, and flag potential conflicts with GeM/CPPP government tenders."
+        />
+      </section>
+
+      {/* Tab 6: Controversies (Phase 3) */}
+      <section id="controversies" className="mb-8 scroll-mt-20">
+        <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
+          Controversies & News
+        </h2>
+        <PhaseStub
+          phase={3}
+          feature="Controversy Tracker"
+          description="Verified controversies, news-linked allegations, and ED/CBI/IT raids for this politician."
+        />
+      </section>
+    </div>
+  );
+}

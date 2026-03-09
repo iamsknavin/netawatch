@@ -1,0 +1,95 @@
+import Link from "next/link";
+
+export function Footer() {
+  return (
+    <footer className="border-t border-border bg-surface mt-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-sm">
+          {/* Brand */}
+          <div>
+            <p className="font-mono text-accent font-semibold mb-2">NETAwatch</p>
+            <p className="text-text-secondary text-xs leading-relaxed">
+              Every rupee. Every case. Every vote. Public record.
+            </p>
+            <p className="text-text-muted text-2xs mt-3">
+              All data sourced from mandatory public disclosures. NETAwatch does not make
+              allegations — we present public records.
+            </p>
+          </div>
+
+          {/* Links */}
+          <div>
+            <p className="font-mono text-text-secondary text-2xs uppercase tracking-widest mb-3">
+              Platform
+            </p>
+            <ul className="space-y-2 text-text-secondary text-xs">
+              <li>
+                <Link href="/politicians" className="hover:text-text-primary transition-colors">
+                  Browse MPs
+                </Link>
+              </li>
+              <li>
+                <Link href="/about" className="hover:text-text-primary transition-colors">
+                  About
+                </Link>
+              </li>
+              <li>
+                <Link href="/data-sources" className="hover:text-text-primary transition-colors">
+                  Data Sources
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Sources */}
+          <div>
+            <p className="font-mono text-text-secondary text-2xs uppercase tracking-widest mb-3">
+              Data Sources
+            </p>
+            <ul className="space-y-2 text-text-secondary text-xs">
+              <li>
+                <a
+                  href="https://www.myneta.info"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-text-primary transition-colors"
+                >
+                  MyNeta / ADR ↗
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://affidavit.eci.gov.in"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-text-primary transition-colors"
+                >
+                  ECI ↗
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://prsindia.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-text-primary transition-colors"
+                >
+                  PRS India ↗
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <p className="text-text-muted text-2xs font-mono">
+            MIT License · Open Source · Phase 1
+          </p>
+          <p className="text-text-muted text-2xs font-mono">
+            Not affiliated with the Government of India
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}
