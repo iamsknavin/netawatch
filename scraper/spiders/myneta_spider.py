@@ -27,6 +27,7 @@ from urllib.parse import urljoin
 
 import scrapy
 from scrapy.http import Response
+from scrapy.exceptions import CloseSpider
 
 from parsers.assets_parser import parse_assets_table, parse_amount
 from parsers.cases_parser import parse_case_row, parse_ipc_sections
@@ -162,6 +163,9 @@ class MyNetaSpider(scrapy.Spider):
         """Parse a state listing page and follow candidate links."""
         house = response.meta["house"]
 
+        if self._at_limit():
+            raise CloseSpider(reason=f"Reached limit of {self.limit} politicians")
+
         candidate_links = response.css("a[href*='candidate.php']::attr(href)").getall()
         logger.debug(f"State page {response.url}: found {len(candidate_links)} candidates")
 
@@ -190,14 +194,17 @@ class MyNetaSpider(scrapy.Spider):
         source_url = response.meta.get("source_url", response.url)
 
         # --- Extract basic info ---
-        name = self._extract_name(response)
+        # Primary: parse title (most reliable for MyNeta — always present)
+        # Title format: "Name(Party):Constituency- CONST(STATE) - Affidavit..."
+        title_data = self._parse_title(response)
+        name = title_data.get("name") or self._extract_name(response)
         if not name:
             logger.warning(f"Could not extract name from {response.url}")
             return None
 
-        party_name = self._extract_party(response)
-        constituency = self._extract_constituency(response)
-        state = self._extract_state(response)
+        party_name = title_data.get("party") or self._extract_party(response)
+        constituency = title_data.get("constituency") or self._extract_constituency(response)
+        state = title_data.get("state") or self._extract_state(response)
 
         # Generate unique slug
         slug = self._unique_slug(name, constituency)
@@ -240,9 +247,67 @@ class MyNetaSpider(scrapy.Spider):
 
     # --- Private extraction helpers ---
 
+    def _parse_title(self, response: Response) -> dict[str, str | None]:
+        """
+        Parse name, party, constituency, and state from the MyNeta page title.
+
+        Title format: "Name(Party):Constituency- CONST(STATE) - Affidavit Information of Candidate:"
+        Examples:
+          "Amit Shah(Bharatiya Janata Party(BJP)):Constituency- GANDHINAGAR(GUJARAT) - Affidavit..."
+          "Sanjay (Kaka) Patil(Bharatiya Janata Party(BJP)):Constituency- SANGLI(MAHARASHTRA) - ..."
+          "Rahul Gandhi(Indian National Congress(INC)):Constituency- WAYANAD(KERALA) - ..."
+        """
+        result: dict[str, str | None] = {
+            "name": None, "party": None, "constituency": None, "state": None
+        }
+        title = response.css("title::text").get("").strip()
+        if not title:
+            return result
+
+        # Split on ":Constituency-" to separate "Name(Party)" from "CONST(STATE) - ..."
+        split_match = re.split(r":Constituency[-\s]+", title, maxsplit=1, flags=re.IGNORECASE)
+        if len(split_match) < 2:
+            return result
+
+        left_part, right_part = split_match[0], split_match[1]
+
+        # Find the outermost "(" from the right in left_part — separates Name from Party.
+        # Scan right-to-left: ')' increases depth, '(' decreases depth.
+        # The outermost '(' is when depth returns to 0 (matching the last ')').
+        depth = 0
+        party_start = -1
+        for i in range(len(left_part) - 1, -1, -1):
+            c = left_part[i]
+            if c == ")":
+                depth += 1
+            elif c == "(":
+                depth -= 1
+                if depth == 0:  # Found the outermost opener
+                    party_start = i
+                    break
+
+        if party_start > 0:
+            result["name"] = left_part[:party_start].strip()
+            # Party is between the outermost '(' and the trailing ')'
+            party_raw = left_part[party_start + 1:].strip()
+            if party_raw.endswith(")"):
+                party_raw = party_raw[:-1]
+            result["party"] = party_raw.strip()
+
+        # Parse constituency and state from right_part: "CONST(STATE) - Affidavit..."
+        const_match = re.match(r"\s*([^(]+)\(([^)]+)\)", right_part)
+        if const_match:
+            result["constituency"] = const_match.group(1).strip()
+            result["state"] = const_match.group(2).strip()
+
+        return result
+
     def _extract_name(self, response: Response) -> str | None:
-        """Extract politician name from page header."""
-        # Try common MyNeta selectors
+        """
+        Extract politician name from page HTML (fallback if _parse_title fails).
+        Note: _parse_title() is the primary source and handles MyNeta's title format.
+        """
+        # Try common MyNeta CSS selectors for the name heading
         selectors = [
             "h1.cand-name::text",
             "h2.cand-name::text",
@@ -250,20 +315,18 @@ class MyNetaSpider(scrapy.Spider):
             "div.cand-name h2::text",
             "#main-content h1::text",
             "h1::text",
-            "title::text",
         ]
         for sel in selectors:
             name = response.css(sel).get()
             if name:
                 name = name.strip()
-                # Clean up title-style names
+                # Strip anything after " - " (subtitle / site name)
                 name = re.sub(r"\s*-\s*myneta.*", "", name, flags=re.IGNORECASE)
                 name = re.sub(r"\s*\|\s*.*", "", name)
                 if name and len(name) > 2:
                     return name
 
-        # Fallback: extract from URL (candidate_id not useful, try page content)
-        # Look for name in breadcrumbs
+        # Breadcrumb fallback
         breadcrumb = response.css("div.breadcrumb a::text, nav a::text").getall()
         for crumb in reversed(breadcrumb):
             if len(crumb.strip()) > 3:
