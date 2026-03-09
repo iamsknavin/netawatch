@@ -25,7 +25,15 @@ export interface PoliticianProfile extends Politician {
 }
 
 /** Lightweight politician for cards and lists */
-export interface PoliticianCard extends Politician {
+export interface PoliticianCard {
+  id: string;
+  name: string;
+  slug: string;
+  profile_image_url: string | null;
+  constituency: string | null;
+  state: string | null;
+  house: string | null;
+  is_active: boolean | null;
   parties: Pick<Party, "id" | "name" | "abbreviation" | "logo_url"> | null;
   latest_net_worth: number | null;
   criminal_case_count: number;
@@ -47,4 +55,19 @@ export interface PartySummary {
   mp_count: number;
   total_criminal_cases: number;
   avg_net_worth: number | null;
+}
+
+/** Raw joined politician query result from Supabase (before mapping to PoliticianCard) */
+export interface PoliticianJoinRow {
+  id: string;
+  name: string;
+  slug: string;
+  profile_image_url: string | null;
+  constituency: string | null;
+  state: string | null;
+  house: string | null;
+  is_active: boolean | null;
+  parties: { id: string; name: string; abbreviation: string | null; logo_url: string | null } | null;
+  assets_declarations: { net_worth: number | null; declaration_year: number }[];
+  criminal_cases: { id: string }[];
 }

@@ -42,11 +42,12 @@ async function getPolitician(slug: string): Promise<PoliticianProfile | null> {
 }
 
 export async function generateStaticParams() {
-  const supabase = await createServerClient();
+  const { createBrowserClient } = await import("@/lib/supabase");
+  const supabase = createBrowserClient();
   const { data } = await supabase
     .from("politicians")
     .select("slug")
-    .eq("is_active", true);
+    .eq("is_active", true) as { data: { slug: string }[] | null };
   return (data ?? []).map((p) => ({ slug: p.slug }));
 }
 
@@ -184,10 +185,8 @@ export default async function PoliticianProfilePage({
       {/* Tab content (server-rendered, hash-based switching via CSS) */}
       <TabLayout
         p={p}
-        party={party}
         latestAssets={latestAssets}
         heinousCases={heinousCases}
-        houseLabel={houseLabel}
       />
     </div>
   );
@@ -196,16 +195,12 @@ export default async function PoliticianProfilePage({
 // Split into a sub-component to keep the page function readable
 function TabLayout({
   p,
-  party,
   latestAssets,
   heinousCases,
-  houseLabel,
 }: {
   p: PoliticianProfile;
-  party: { name: string; abbreviation: string | null; logo_url: string | null } | null;
   latestAssets: PoliticianProfile["assets_declarations"][0] | null;
   heinousCases: PoliticianProfile["criminal_cases"];
-  houseLabel: string | null;
 }) {
   return (
     <div>

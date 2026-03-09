@@ -4,7 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { formatIndianCurrency } from "@/lib/formatters";
 import { PoliticianCard } from "@/components/politician/PoliticianCard";
 import { StatCard } from "@/components/ui/StatCard";
-import type { PoliticianCard as PoliticianCardType } from "@/types";
+import type { PoliticianCard as PoliticianCardType, Party, PoliticianJoinRow } from "@/types";
 
 export const revalidate = 3600;
 
@@ -12,11 +12,12 @@ async function getPartyData(slug: string) {
   const supabase = await createServerClient();
 
   // Try by abbreviation first, then by name
-  const { data: parties } = await supabase
+  const { data: partiesRaw } = await supabase
     .from("parties")
     .select("*");
+  const parties = (partiesRaw ?? []) as Party[];
 
-  if (!parties) return null;
+  if (parties.length === 0) return null;
 
   const party = parties.find(
     (p) =>
@@ -36,16 +37,16 @@ async function getPartyData(slug: string) {
     `)
     .eq("party_id", party.id)
     .eq("is_active", true)
-    .order("name");
+    .order("name") as { data: PoliticianJoinRow[] | null };
 
   const mapped: PoliticianCardType[] = (politicians ?? []).map((p) => {
-    const assets = (p.assets_declarations as Array<{ net_worth: number | null; declaration_year: number }> | null) ?? [];
+    const assets = p.assets_declarations ?? [];
     const latest = assets.sort((a, b) => b.declaration_year - a.declaration_year)[0];
     return {
       ...p,
       parties: p.parties as PoliticianCardType["parties"],
       latest_net_worth: latest?.net_worth ?? null,
-      criminal_case_count: (p.criminal_cases as Array<{ id: string }> | null)?.length ?? 0,
+      criminal_case_count: (p.criminal_cases ?? []).length,
     } as PoliticianCardType;
   });
 
@@ -57,8 +58,9 @@ async function getPartyData(slug: string) {
 }
 
 export async function generateStaticParams() {
-  const supabase = await createServerClient();
-  const { data } = await supabase.from("parties").select("abbreviation, name");
+  const { createBrowserClient } = await import("@/lib/supabase");
+  const supabase = createBrowserClient();
+  const { data } = await supabase.from("parties").select("abbreviation, name") as { data: { abbreviation: string | null; name: string }[] | null };
   return (data ?? []).map((p) => ({
     slug: (p.abbreviation ?? p.name).toLowerCase(),
   }));

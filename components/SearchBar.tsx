@@ -141,7 +141,7 @@ export function SearchBar({ compact, autoFocus }: SearchBarProps) {
               onClick={() => { setIsOpen(false); setQuery(""); }}
               className="text-2xs font-mono text-text-secondary hover:text-accent transition-colors"
             >
-              See all results for "{query}" →
+              See all results for &ldquo;{query}&rdquo; →
             </Link>
           </div>
         </div>
@@ -150,7 +150,7 @@ export function SearchBar({ compact, autoFocus }: SearchBarProps) {
       {isOpen && query && results.length === 0 && !loading && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border shadow-xl z-50 rounded-sm">
           <p className="px-3 py-4 text-xs font-mono text-text-muted text-center">
-            No results for "{query}"
+            No results for &ldquo;{query}&rdquo;
           </p>
         </div>
       )}

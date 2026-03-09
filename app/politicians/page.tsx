@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase";
-import { formatIndianCurrency } from "@/lib/formatters";
-import { HOUSE_LABELS, INDIAN_STATES } from "@/lib/utils";
+import { INDIAN_STATES } from "@/lib/utils";
 import { PoliticianCard } from "@/components/politician/PoliticianCard";
-import type { PoliticianCard as PoliticianCardType } from "@/types";
+import type { PoliticianCard as PoliticianCardType, PoliticianJoinRow } from "@/types";
 
 export const revalidate = 3600;
 
@@ -48,17 +47,17 @@ async function getPoliticians(params: SearchParams) {
   if (sort === "name") query = query.order("name", { ascending: true });
   else if (sort === "name_desc") query = query.order("name", { ascending: false });
 
-  const { data, count } = await query.range(offset, offset + PAGE_SIZE - 1);
+  const { data, count } = await query.range(offset, offset + PAGE_SIZE - 1) as { data: PoliticianJoinRow[] | null; count: number | null };
 
   // Map to PoliticianCard type
   const mapped: PoliticianCardType[] = (data ?? []).map((p) => {
-    const assets = (p.assets_declarations as Array<{ net_worth: number | null; declaration_year: number }> | null) ?? [];
+    const assets = (p.assets_declarations ?? []) as Array<{ net_worth: number | null; declaration_year: number }>;
     const latest = assets.sort((a, b) => b.declaration_year - a.declaration_year)[0];
     return {
       ...p,
       parties: p.parties as PoliticianCardType["parties"],
       latest_net_worth: latest?.net_worth ?? null,
-      criminal_case_count: (p.criminal_cases as Array<{ id: string }> | null)?.length ?? 0,
+      criminal_case_count: (p.criminal_cases ?? []).length,
     } as PoliticianCardType;
   });
 
@@ -79,7 +78,7 @@ async function getParties() {
   const { data } = await supabase
     .from("parties")
     .select("id, name, abbreviation")
-    .order("name");
+    .order("name") as { data: { id: string; name: string; abbreviation: string | null }[] | null };
   return data ?? [];
 }
 
@@ -89,7 +88,7 @@ export default async function PoliticiansPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const [{ politicians, total, page, pages }, parties] = await Promise.all([
+  const [{ politicians, total, page, pages }] = await Promise.all([
     getPoliticians(params),
     getParties(),
   ]);

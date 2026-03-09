@@ -6,13 +6,14 @@ interface DataSourceTagProps {
   source: SourceKey | string;
   url?: string;
   label?: string;
+  className?: string;
 }
 
 /**
  * Every data point must show its source.
  * Use this component to attribute data.
  */
-export function DataSourceTag({ source, url, label }: DataSourceTagProps) {
+export function DataSourceTag({ source, url, label, className }: DataSourceTagProps) {
   const knownSource =
     source in DATA_SOURCES
       ? DATA_SOURCES[source as SourceKey]
@@ -22,7 +23,7 @@ export function DataSourceTag({ source, url, label }: DataSourceTagProps) {
   const href = url ?? knownSource?.url;
 
   return (
-    <span className="inline-flex items-center gap-1 text-2xs font-mono text-text-muted border border-border/50 px-1.5 py-0.5 rounded-sm">
+    <span className={`inline-flex items-center gap-1 text-2xs font-mono text-text-muted border border-border/50 px-1.5 py-0.5 rounded-sm ${className ?? ""}`}>
       <span className="text-text-muted opacity-60">src:</span>
       {href ? (
         <a

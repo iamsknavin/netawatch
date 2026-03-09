@@ -22,8 +22,9 @@ async function getPlatformStats(): Promise<PlatformStats> {
     supabase.from("assets_declarations").select("net_worth"),
   ]);
 
-  const politicians = politiciansResult.data ?? [];
-  const totalDeclaredWealth = (assetsResult.data ?? []).reduce(
+  const politicians = (politiciansResult.data ?? []) as { id: string; house: string; updated_at: string }[];
+  const assetsRows = (assetsResult.data ?? []) as { net_worth: number | null }[];
+  const totalDeclaredWealth = assetsRows.reduce(
     (sum, a) => sum + (a.net_worth ?? 0),
     0
   );
@@ -58,7 +59,14 @@ async function getTopParties() {
   if (!parties) return [];
 
   const results = await Promise.all(
-    parties.map(async (party) => {
+    (parties as { id: string; name: string; abbreviation: string | null }[]).map(async (party) => {
+      // Get party member IDs first
+      const partyMembersResult = await supabase
+        .from("politicians")
+        .select("id")
+        .eq("party_id", party.id);
+      const memberIds = ((partyMembersResult.data ?? []) as { id: string }[]).map((p) => p.id);
+
       const [mps, cases, assets] = await Promise.all([
         supabase
           .from("politicians")
@@ -68,31 +76,15 @@ async function getTopParties() {
         supabase
           .from("criminal_cases")
           .select("id", { count: "exact" })
-          .in(
-            "politician_id",
-            (
-              await supabase
-                .from("politicians")
-                .select("id")
-                .eq("party_id", party.id)
-            ).data?.map((p) => p.id) ?? []
-          ),
+          .in("politician_id", memberIds.length > 0 ? memberIds : ["__none__"]),
         supabase
           .from("assets_declarations")
           .select("net_worth")
-          .in(
-            "politician_id",
-            (
-              await supabase
-                .from("politicians")
-                .select("id")
-                .eq("party_id", party.id)
-            ).data?.map((p) => p.id) ?? []
-          ),
+          .in("politician_id", memberIds.length > 0 ? memberIds : ["__none__"]),
       ]);
 
       const mpCount = mps.count ?? 0;
-      const assetData = assets.data ?? [];
+      const assetData = (assets.data ?? []) as { net_worth: number | null }[];
       const avgNetWorth =
         assetData.length > 0
           ? assetData.reduce((s, a) => s + (a.net_worth ?? 0), 0) /
@@ -111,7 +103,16 @@ async function getTopParties() {
   return results.sort((a, b) => b.mp_count - a.mp_count);
 }
 
-async function getRecentUpdates() {
+interface RecentUpdate {
+  id: string;
+  name: string;
+  slug: string;
+  updated_at: string;
+  house: string;
+  parties: { name: string; abbreviation: string | null } | null;
+}
+
+async function getRecentUpdates(): Promise<RecentUpdate[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("politicians")
@@ -119,7 +120,7 @@ async function getRecentUpdates() {
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(8);
-  return data ?? [];
+  return (data ?? []) as RecentUpdate[];
 }
 
 export default async function HomePage() {

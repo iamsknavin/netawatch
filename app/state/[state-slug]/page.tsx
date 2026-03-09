@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createServerClient } from "@/lib/supabase";
+import { formatIndianCurrency } from "@/lib/formatters";
 import { INDIAN_STATES } from "@/lib/utils";
 import { PoliticianCard } from "@/components/politician/PoliticianCard";
 import { StatCard } from "@/components/ui/StatCard";
-import type { PoliticianCard as PoliticianCardType } from "@/types/politician";
+import type { PoliticianCard as PoliticianCardType, PoliticianJoinRow } from "@/types/politician";
 
 export const revalidate = 3600;
 
@@ -25,16 +26,16 @@ async function getStateData(stateSlug: string) {
     `)
     .ilike("state", `%${stateName}%`)
     .eq("is_active", true)
-    .order("name");
+    .order("name") as { data: PoliticianJoinRow[] | null };
 
   const politicians: PoliticianCardType[] = (data ?? []).map((p) => {
-    const assets = (p.assets_declarations as Array<{ net_worth: number | null; declaration_year: number }> | null) ?? [];
+    const assets = p.assets_declarations ?? [];
     const latest = assets.sort((a, b) => b.declaration_year - a.declaration_year)[0];
     return {
       ...p,
       parties: p.parties as PoliticianCardType["parties"],
       latest_net_worth: latest?.net_worth ?? null,
-      criminal_case_count: (p.criminal_cases as Array<{ id: string }> | null)?.length ?? 0,
+      criminal_case_count: (p.criminal_cases ?? []).length,
     } as PoliticianCardType;
   });
 
@@ -79,10 +80,11 @@ export default async function StatePage({
         <h1 className="text-2xl font-bold text-text-primary">{stateName}</h1>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
         <StatCard label="Total MPs" value={politicians.length} accent />
         <StatCard label="Lok Sabha" value={lsMPs.length} />
         <StatCard label="Rajya Sabha" value={rsMPs.length} />
+        <StatCard label="Total Wealth" value={formatIndianCurrency(totalWealth)} accent />
         <StatCard label="Criminal Cases" value={totalCases} danger={totalCases > 0} />
       </div>
 

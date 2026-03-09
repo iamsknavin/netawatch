@@ -16,9 +16,10 @@ async function getDataStats() {
     supabase.from("attendance_records").select("id", { count: "exact" }),
   ]);
 
+  const politicianRows = politicians.data as { id: string; updated_at: string }[] | null;
   const lastScraped =
-    politicians.data && politicians.data.length > 0
-      ? politicians.data.sort(
+    politicianRows && politicianRows.length > 0
+      ? politicianRows.sort(
           (a, b) =>
             new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         )[0]?.updated_at
