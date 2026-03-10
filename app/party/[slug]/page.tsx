@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createServerClient } from "@/lib/supabase";
 import { formatIndianCurrency } from "@/lib/formatters";
 import { PoliticianCard } from "@/components/politician/PoliticianCard";
@@ -30,7 +31,7 @@ async function getPartyData(slug: string) {
   const { data: politicians } = await supabase
     .from("politicians")
     .select(`
-      id, name, slug, profile_image_url, constituency, state, house, is_active,
+      id, name, slug, profile_image_url, constituency, state, house, is_active, election_status,
       parties (id, name, abbreviation, logo_url),
       assets_declarations (net_worth, declaration_year),
       criminal_cases (id)
@@ -90,6 +91,15 @@ export default async function PartyPage({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Breadcrumb */}
+      <nav className="font-mono text-2xs text-text-muted mb-6">
+        <Link href="/" className="hover:text-text-primary transition-colors">Home</Link>
+        <span className="mx-2">&rsaquo;</span>
+        <Link href="/parties" className="hover:text-text-primary transition-colors">Parties</Link>
+        <span className="mx-2">&rsaquo;</span>
+        <span className="text-text-secondary">{party.name}</span>
+      </nav>
+
       <div className="mb-8">
         <p className="font-mono text-text-muted text-2xs uppercase tracking-widest mb-2">
           Political Party
@@ -140,6 +150,15 @@ export default async function PartyPage({
           ))}
         </div>
       )}
+
+      <div className="mt-6">
+        <Link
+          href={`/politicians?party=${(party.abbreviation ?? party.name).toLowerCase()}`}
+          className="inline-block font-mono text-xs text-text-secondary hover:text-accent transition-colors"
+        >
+          View in Browse &rarr;
+        </Link>
+      </div>
     </div>
   );
 }

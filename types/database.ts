@@ -601,6 +601,7 @@ export interface Database {
           created_at: string | null
           date_of_birth: string | null
           education: string | null
+          election_status: string | null
           gender: string | null
           house: string | null
           id: string
@@ -626,6 +627,7 @@ export interface Database {
           created_at?: string | null
           date_of_birth?: string | null
           education?: string | null
+          election_status?: string | null
           gender?: string | null
           house?: string | null
           id?: string
@@ -651,6 +653,7 @@ export interface Database {
           created_at?: string | null
           date_of_birth?: string | null
           education?: string | null
+          election_status?: string | null
           gender?: string | null
           house?: string | null
           id?: string

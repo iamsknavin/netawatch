@@ -6,9 +6,10 @@ Extracts: name, party, constituency, state, house, assets, liabilities,
           criminal cases, profile photo.
 
 Usage:
-  scrapy crawl myneta                              # both houses
-  scrapy crawl myneta -a house=lok_sabha           # Lok Sabha only
+  scrapy crawl myneta                              # both houses, winners only (default)
+  scrapy crawl myneta -a house=lok_sabha           # Lok Sabha only, winners only
   scrapy crawl myneta -a house=rajya_sabha         # Rajya Sabha only
+  scrapy crawl myneta -a all_candidates=true       # scrape ALL candidates (won + lost)
   scrapy crawl myneta -a house=lok_sabha -a dry_run=true  # dry run (no DB writes)
   scrapy crawl myneta -a limit=10                  # stop after 10 politicians (testing)
 
@@ -83,18 +84,21 @@ class MyNetaSpider(scrapy.Spider):
         house: str = "both",
         dry_run: str = "false",
         limit: str = "0",
+        all_candidates: str = "false",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.target_house = house.lower()
         self.dry_run = dry_run.lower() == "true"
         self.limit = int(limit)
+        self.winners_only = all_candidates.lower() != "true"
         self._count = 0
         self._seen_slugs: set[str] = set()
 
         if self.dry_run:
             logger.info("🔍 DRY RUN — data will be logged but not saved to DB")
-        logger.info(f"Targeting: {self.target_house} | Limit: {self.limit or 'none'}")
+        mode = "winners only" if self.winners_only else "all candidates"
+        logger.info(f"Targeting: {self.target_house} | Mode: {mode} | Limit: {self.limit or 'none'}")
 
     def start_requests(self):
         """Start from the election index pages."""
@@ -118,24 +122,25 @@ class MyNetaSpider(scrapy.Spider):
         """
         Parse the election index page.
         Finds all state/constituency links and follows them.
+        Tries to extract election result (Won/Lost) from listing tables.
         """
         house = response.meta["house"]
         logger.info(f"Parsing index for {house}: {response.url}")
 
         # MyNeta index has table with state links
         # Try to find all candidate links directly or state sub-pages
-        candidate_links = response.css("a[href*='candidate.php']::attr(href)").getall()
+        # Also try to capture election result from the listing table
+        candidate_links = self._extract_candidate_links_with_result(response)
 
         if candidate_links:
-            # Index page directly lists candidates
-            for href in candidate_links:
+            for href, election_result in candidate_links:
                 if self._at_limit():
                     return
                 url = urljoin(response.url, href)
                 yield scrapy.Request(
                     url,
                     callback=self.parse_candidate,
-                    meta={"house": house, "source_url": url},
+                    meta={"house": house, "source_url": url, "election_result": election_result},
                 )
         else:
             # Need to follow state links first
@@ -166,17 +171,17 @@ class MyNetaSpider(scrapy.Spider):
         if self._at_limit():
             raise CloseSpider(reason=f"Reached limit of {self.limit} politicians")
 
-        candidate_links = response.css("a[href*='candidate.php']::attr(href)").getall()
+        candidate_links = self._extract_candidate_links_with_result(response)
         logger.debug(f"State page {response.url}: found {len(candidate_links)} candidates")
 
-        for href in candidate_links:
+        for href, election_result in candidate_links:
             if self._at_limit():
                 return
             url = urljoin(response.url, href)
             yield scrapy.Request(
                 url,
                 callback=self.parse_candidate,
-                meta={"house": house, "source_url": url},
+                meta={"house": house, "source_url": url, "election_result": election_result},
             )
 
     def parse_candidate(self, response: Response) -> dict[str, Any] | None:
@@ -221,6 +226,9 @@ class MyNetaSpider(scrapy.Spider):
         # --- Extract personal details ---
         personal = self._extract_personal_details(response)
 
+        # Determine election result from listing page or candidate page
+        election_result = response.meta.get("election_result", "candidate")
+
         # Build item
         item = {
             "item_type": "politician",
@@ -231,6 +239,7 @@ class MyNetaSpider(scrapy.Spider):
             "state": state,
             "house": house,
             "is_active": True,
+            "election_status": election_result,
             "profile_image_url": profile_image_url,
             "assets": assets,
             "criminal_cases": criminal_cases,
@@ -295,10 +304,20 @@ class MyNetaSpider(scrapy.Spider):
             result["party"] = party_raw.strip()
 
         # Parse constituency and state from right_part: "CONST(STATE) - Affidavit..."
-        const_match = re.match(r"\s*([^(]+)\(([^)]+)\)", right_part)
-        if const_match:
+        # SC/ST reserved seats have format: "CONST (SC)(STATE)" or "CONST(SC)(STATE)"
+        # Use findall to get ALL parenthesized groups, then pick the last one as state
+        const_match = re.match(r"\s*([^(]+)", right_part)
+        paren_groups = re.findall(r"\(([^)]+)\)", right_part)
+        if const_match and paren_groups:
             result["constituency"] = const_match.group(1).strip()
-            result["state"] = const_match.group(2).strip()
+            # Last parenthesized group before " - Affidavit" is the state
+            # Skip SC/ST markers — the actual state is always the last group
+            state_candidate = paren_groups[-1].strip()
+            # If last group looks like a suffix (e.g., from "Affidavit..."), use second-to-last
+            if "affidavit" in state_candidate.lower() or "criminal" in state_candidate.lower():
+                if len(paren_groups) >= 2:
+                    state_candidate = paren_groups[-2].strip()
+            result["state"] = state_candidate
 
         return result
 
@@ -563,6 +582,46 @@ class MyNetaSpider(scrapy.Spider):
                 self._seen_slugs.add(candidate)
                 return candidate
             counter += 1
+
+    def _extract_candidate_links_with_result(self, response: Response) -> list[tuple[str, str]]:
+        """
+        Extract candidate links and their election results from a listing page.
+        MyNeta tables often have columns: S.No, Candidate, Constituency, Party, Result
+        Returns list of (href, election_status) tuples where election_status is 'won', 'lost', or 'candidate'.
+
+        When self.winners_only is True (default), only returns candidates who won.
+        Use -a all_candidates=true to scrape all candidates.
+        """
+        results: list[tuple[str, str]] = []
+
+        # Try to find table rows containing candidate links
+        for row in response.css("table tr"):
+            link = row.css("a[href*='candidate.php']::attr(href)").get()
+            if not link:
+                continue
+
+            # Check for election result in the row text
+            row_text = " ".join(row.css("::text").getall()).lower()
+            if "won" in row_text or "winner" in row_text:
+                election_result = "won"
+            elif "lost" in row_text or "lose" in row_text:
+                election_result = "lost"
+            else:
+                election_result = "candidate"
+
+            # Skip non-winners when winners_only mode is active
+            if self.winners_only and election_result != "won":
+                continue
+
+            results.append((link, election_result))
+
+        # Fallback: if no table rows found, try plain candidate links
+        # (only when not in winners_only mode, since we can't determine result)
+        if not results and not self.winners_only:
+            for href in response.css("a[href*='candidate.php']::attr(href)").getall():
+                results.append((href, "candidate"))
+
+        return results
 
     def _at_limit(self) -> bool:
         """Check if we've hit the --limit cap."""

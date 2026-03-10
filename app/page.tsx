@@ -10,14 +10,18 @@ import type { PlatformStats } from "@/types";
 
 export const revalidate = 3600; // revalidate every hour
 
-async function getPlatformStats(): Promise<PlatformStats> {
+async function getPlatformStats(): Promise<PlatformStats & { total_elected: number }> {
   const supabase = await createServerClient();
 
-  const [politiciansResult, casesResult, assetsResult] = await Promise.all([
+  const [politiciansResult, electedResult, casesResult, assetsResult] = await Promise.all([
     supabase
       .from("politicians")
       .select("id, house, updated_at", { count: "exact" })
       .eq("is_active", true),
+    supabase
+      .from("politicians")
+      .select("id", { count: "exact", head: true })
+      .eq("election_status", "won"),
     supabase.from("criminal_cases").select("id", { count: "exact" }),
     supabase.from("assets_declarations").select("net_worth"),
   ]);
@@ -39,6 +43,7 @@ async function getPlatformStats(): Promise<PlatformStats> {
 
   return {
     total_politicians: politiciansResult.count ?? 0,
+    total_elected: electedResult.count ?? 0,
     total_lok_sabha: politicians.filter((p) => p.house === "lok_sabha").length,
     total_rajya_sabha: politicians.filter((p) => p.house === "rajya_sabha").length,
     total_criminal_cases: casesResult.count ?? 0,
@@ -178,9 +183,9 @@ export default async function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <StatCard
-              label="MPs Tracked"
-              value={stats.total_politicians.toLocaleString("en-IN")}
-              subValue={`LS: ${stats.total_lok_sabha} · RS: ${stats.total_rajya_sabha}`}
+              label={stats.total_elected > 0 ? "Elected MPs" : "Candidates Tracked"}
+              value={stats.total_elected > 0 ? stats.total_elected.toLocaleString("en-IN") : stats.total_politicians.toLocaleString("en-IN")}
+              subValue={stats.total_elected > 0 ? `of ${stats.total_politicians} total candidates` : `LS: ${stats.total_lok_sabha} · RS: ${stats.total_rajya_sabha}`}
               accent
             />
             <StatCard

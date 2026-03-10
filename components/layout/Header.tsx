@@ -33,6 +33,12 @@ export function Header() {
               Browse
             </Link>
             <Link
+              href="/parties"
+              className="hover:text-text-primary transition-colors font-mono"
+            >
+              Parties
+            </Link>
+            <Link
               href="/about"
               className="hover:text-text-primary transition-colors font-mono"
             >

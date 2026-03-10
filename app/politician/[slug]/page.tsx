@@ -75,9 +75,13 @@ export default async function PoliticianProfilePage({
   if (!p) notFound();
 
   const party = p.parties as { name: string; abbreviation: string | null; logo_url: string | null } | null;
-  const latestAssets = [...p.assets_declarations]
+  const assets = p.assets_declarations ?? [];
+  const cases = p.criminal_cases ?? [];
+  const terms = p.election_terms ?? [];
+  const attendance = p.attendance_records ?? [];
+  const latestAssets = [...assets]
     .sort((a, b) => b.declaration_year - a.declaration_year)[0] ?? null;
-  const heinousCases = p.criminal_cases.filter((c) => c.is_heinous);
+  const heinousCases = cases.filter((c) => c.is_heinous);
   const houseLabel = HOUSE_LABELS[p.house ?? ""] ?? p.house;
 
   return (
@@ -136,6 +140,24 @@ export default async function PoliticianProfilePage({
                   {houseLabel}
                 </span>
               )}
+              {(() => {
+                const status = p.election_status;
+                if (status === "won") return (
+                  <span className="font-mono text-2xs border border-safe/50 bg-safe/10 text-safe px-1.5 py-0.5 rounded-sm">
+                    ELECTED MP
+                  </span>
+                );
+                if (status === "lost") return (
+                  <span className="font-mono text-2xs border border-danger/50 bg-danger/10 text-danger px-1.5 py-0.5 rounded-sm">
+                    CANDIDATE (LOST)
+                  </span>
+                );
+                return (
+                  <span className="font-mono text-2xs border border-border bg-surface-2 text-text-muted px-1.5 py-0.5 rounded-sm">
+                    CANDIDATE
+                  </span>
+                );
+              })()}
             </div>
 
             {(p.constituency || p.state) && (
@@ -158,7 +180,7 @@ export default async function PoliticianProfilePage({
                 <span className="text-text-muted text-xs font-mono">Criminal Cases</span>
                 <p className="mt-0.5">
                   <CasesBadge
-                    count={p.criminal_cases.length}
+                    count={cases.length}
                     hasHeinous={heinousCases.length > 0}
                   />
                 </p>
@@ -166,14 +188,14 @@ export default async function PoliticianProfilePage({
               <div>
                 <span className="text-text-muted text-xs font-mono">Terms</span>
                 <p className="font-mono text-text-primary font-semibold">
-                  {p.election_terms.length}
+                  {terms.length}
                 </p>
               </div>
-              {p.attendance_records[0]?.attendance_percent !== undefined && (
+              {attendance[0]?.attendance_percent !== undefined && (
                 <div>
                   <span className="text-text-muted text-xs font-mono">Attendance</span>
                   <p className="font-mono text-text-primary font-semibold">
-                    {formatPercent(p.attendance_records[0].attendance_percent)}
+                    {formatPercent(attendance[0].attendance_percent)}
                   </p>
                 </div>
               )}
@@ -185,6 +207,10 @@ export default async function PoliticianProfilePage({
       {/* Tab content (server-rendered, hash-based switching via CSS) */}
       <TabLayout
         p={p}
+        assets={assets}
+        cases={cases}
+        terms={terms}
+        attendance={attendance}
         latestAssets={latestAssets}
         heinousCases={heinousCases}
       />
@@ -195,10 +221,18 @@ export default async function PoliticianProfilePage({
 // Split into a sub-component to keep the page function readable
 function TabLayout({
   p,
+  assets,
+  cases,
+  terms,
+  attendance,
   latestAssets,
   heinousCases,
 }: {
   p: PoliticianProfile;
+  assets: PoliticianProfile["assets_declarations"];
+  cases: PoliticianProfile["criminal_cases"];
+  terms: PoliticianProfile["election_terms"];
+  attendance: PoliticianProfile["attendance_records"];
   latestAssets: PoliticianProfile["assets_declarations"][0] | null;
   heinousCases: PoliticianProfile["criminal_cases"];
 }) {
@@ -208,8 +242,8 @@ function TabLayout({
       <div className="flex overflow-x-auto border-b border-border mb-6 gap-0">
         {[
           { id: "wealth", label: "Wealth & Assets" },
-          { id: "cases", label: `Cases (${p.criminal_cases.length})` },
-          { id: "elections", label: `Elections (${p.election_terms.length})` },
+          { id: "cases", label: `Cases (${cases.length})` },
+          { id: "elections", label: `Elections (${terms.length})` },
           { id: "performance", label: "Parliament" },
           { id: "companies", label: "Companies" },
           { id: "controversies", label: "Controversies" },
@@ -325,7 +359,7 @@ function TabLayout({
             </div>
 
             {/* YoY stub */}
-            {p.assets_declarations.length < 2 && (
+            {assets.length < 2 && (
               <div className="border border-dashed border-border p-4 rounded-sm text-center">
                 <p className="font-mono text-2xs text-text-muted">
                   Year-over-year comparison — data for previous elections coming soon
@@ -361,12 +395,12 @@ function TabLayout({
             Criminal Cases
           </h2>
           <CasesBadge
-            count={p.criminal_cases.length}
+            count={cases.length}
             hasHeinous={heinousCases.length > 0}
           />
         </div>
 
-        {p.criminal_cases.length === 0 ? (
+        {cases.length === 0 ? (
           <div className="bg-safe/5 border border-safe/30 p-6 rounded-sm text-center">
             <p className="font-mono text-safe text-sm">
               ✓ No criminal cases declared
@@ -383,7 +417,7 @@ function TabLayout({
               </div>
             )}
 
-            {p.criminal_cases.map((c) => (
+            {cases.map((c) => (
               <div
                 key={c.id}
                 className={`bg-surface border rounded-sm p-4 ${
@@ -450,7 +484,7 @@ function TabLayout({
           Election History
         </h2>
 
-        {p.election_terms.length === 0 ? (
+        {terms.length === 0 ? (
           <div className="border border-dashed border-border p-8 text-center rounded-sm">
             <p className="font-mono text-text-secondary text-sm">
               Election history not yet available
@@ -458,7 +492,7 @@ function TabLayout({
           </div>
         ) : (
           <div className="space-y-2">
-            {[...p.election_terms]
+            {[...terms]
               .sort((a, b) => b.election_year - a.election_year)
               .map((term) => (
                 <div
@@ -510,9 +544,9 @@ function TabLayout({
           Parliamentary Performance
         </h2>
 
-        {p.attendance_records.length > 0 ? (
+        {attendance.length > 0 ? (
           <div className="space-y-4">
-            {p.attendance_records.map((rec) => (
+            {attendance.map((rec) => (
               <div
                 key={rec.id}
                 className="bg-surface border border-border rounded-sm p-4"

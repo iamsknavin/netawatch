@@ -14,6 +14,7 @@ interface SearchParams {
   cases?: string;
   sort?: string;
   page?: string;
+  status?: string;
 }
 
 const PAGE_SIZE = 50;
@@ -29,7 +30,7 @@ async function getPoliticians(params: SearchParams) {
     .from("politicians")
     .select(
       `
-      id, name, slug, profile_image_url, constituency, state, house, is_active,
+      id, name, slug, profile_image_url, constituency, state, house, is_active, election_status,
       parties (id, name, abbreviation, logo_url),
       assets_declarations (net_worth, declaration_year),
       criminal_cases (id)
@@ -37,6 +38,10 @@ async function getPoliticians(params: SearchParams) {
       { count: "exact" }
     )
     .eq("is_active", true);
+
+  if (params.status === "won") query = query.eq("election_status", "won");
+  else if (params.status === "candidate") query = query.eq("election_status", "candidate");
+  else if (params.status === "lost") query = query.eq("election_status", "lost");
 
   if (params.house) query = query.eq("house", params.house);
   if (params.state) query = query.ilike("state", `%${params.state}%`);
@@ -111,6 +116,35 @@ export default async function PoliticiansPage({
           <form className="space-y-6 sticky top-20">
             <div>
               <label className="block font-mono text-2xs text-text-muted uppercase tracking-widest mb-2">
+                Status
+              </label>
+              <div className="space-y-1">
+                {[
+                  { value: "", label: "All" },
+                  { value: "won", label: "Elected MPs" },
+                  { value: "candidate", label: "Candidates" },
+                  { value: "lost", label: "Lost" },
+                ].map((opt) => (
+                  <Link
+                    key={opt.value}
+                    href={{
+                      pathname: "/politicians",
+                      query: { ...params, status: opt.value || undefined, page: undefined },
+                    }}
+                    className={`block text-xs font-mono px-2 py-1.5 rounded-sm border transition-colors ${
+                      (params.status ?? "") === opt.value
+                        ? "border-accent text-accent bg-accent/10"
+                        : "border-border text-text-secondary hover:border-text-secondary"
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-mono text-2xs text-text-muted uppercase tracking-widest mb-2">
                 House
               </label>
               <div className="space-y-1">
@@ -141,25 +175,37 @@ export default async function PoliticiansPage({
               <label className="block font-mono text-2xs text-text-muted uppercase tracking-widest mb-2">
                 State
               </label>
-              <select
-                name="state"
-                defaultValue={params.state ?? ""}
-                className="w-full bg-surface-2 border border-border text-text-primary text-xs font-mono px-2 py-1.5 rounded-sm focus:outline-none focus:border-accent"
-                onChange={(e) => {
-                  const url = new URL(window.location.href);
-                  if (e.target.value) url.searchParams.set("state", e.target.value);
-                  else url.searchParams.delete("state");
-                  url.searchParams.delete("page");
-                  window.location.href = url.toString();
-                }}
-              >
-                <option value="">All States</option>
+              <div className="max-h-48 overflow-y-auto space-y-1 border border-border rounded-sm p-1">
+                <Link
+                  href={{
+                    pathname: "/politicians",
+                    query: { ...params, state: undefined, page: undefined },
+                  }}
+                  className={`block text-xs font-mono px-2 py-1.5 rounded-sm transition-colors ${
+                    !params.state
+                      ? "border border-accent text-accent bg-accent/10"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  All States
+                </Link>
                 {INDIAN_STATES.map((s) => (
-                  <option key={s.slug} value={s.name}>
+                  <Link
+                    key={s.slug}
+                    href={{
+                      pathname: "/politicians",
+                      query: { ...params, state: s.name, page: undefined },
+                    }}
+                    className={`block text-xs font-mono px-2 py-1.5 rounded-sm transition-colors ${
+                      params.state === s.name
+                        ? "border border-accent text-accent bg-accent/10"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
                     {s.name}
-                  </option>
+                  </Link>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div>
@@ -219,7 +265,7 @@ export default async function PoliticiansPage({
             </div>
 
             {/* Clear filters */}
-            {(params.house || params.state || params.cases || params.sort) && (
+            {(params.house || params.state || params.cases || params.sort || params.status) && (
               <Link
                 href="/politicians"
                 className="block text-2xs font-mono text-text-muted hover:text-danger transition-colors"

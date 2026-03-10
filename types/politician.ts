@@ -67,6 +67,7 @@ export interface PoliticianJoinRow {
   state: string | null;
   house: string | null;
   is_active: boolean | null;
+  election_status: string | null;
   parties: { id: string; name: string; abbreviation: string | null; logo_url: string | null } | null;
   assets_declarations: { net_worth: number | null; declaration_year: number }[];
   criminal_cases: { id: string }[];

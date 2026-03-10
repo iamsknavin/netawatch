@@ -19,7 +19,7 @@ async function getStateData(stateSlug: string) {
   const { data } = await supabase
     .from("politicians")
     .select(`
-      id, name, slug, profile_image_url, constituency, state, house, is_active,
+      id, name, slug, profile_image_url, constituency, state, house, is_active, election_status,
       parties (id, name, abbreviation, logo_url),
       assets_declarations (net_worth, declaration_year),
       criminal_cases (id)

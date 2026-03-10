@@ -119,6 +119,7 @@ class SupabasePipeline:
             "state": item.get("state"),
             "house": item.get("house"),
             "is_active": item.get("is_active", True),
+            "election_status": item.get("election_status", "candidate"),
             "pan_card_last4": item.get("pan_card_last4"),
             "official_website": item.get("official_website"),
         }
