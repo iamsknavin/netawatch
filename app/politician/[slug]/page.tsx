@@ -206,7 +206,6 @@ export default async function PoliticianProfilePage({
 
       {/* Tab content (server-rendered, hash-based switching via CSS) */}
       <TabLayout
-        p={p}
         assets={assets}
         cases={cases}
         terms={terms}
@@ -220,7 +219,6 @@ export default async function PoliticianProfilePage({
 
 // Split into a sub-component to keep the page function readable
 function TabLayout({
-  p,
   assets,
   cases,
   terms,
@@ -228,7 +226,6 @@ function TabLayout({
   latestAssets,
   heinousCases,
 }: {
-  p: PoliticianProfile;
   assets: PoliticianProfile["assets_declarations"];
   cases: PoliticianProfile["criminal_cases"];
   terms: PoliticianProfile["election_terms"];
