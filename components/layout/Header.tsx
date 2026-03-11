@@ -50,6 +50,12 @@ export function Header() {
             >
               Data
             </Link>
+            <Link
+              href="/api-docs"
+              className="hover:text-text-primary transition-colors font-mono"
+            >
+              API
+            </Link>
             <a
               href="https://github.com/netawatch/netawatch"
               target="_blank"
