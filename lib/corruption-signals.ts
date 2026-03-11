@@ -26,7 +26,7 @@ export interface CorruptionSignal {
 interface PoliticianData {
   id: string;
   name: string;
-  criminal_cases: { id: string; is_heinous: boolean; current_status: string; ipc_sections: string[] | null }[];
+  criminal_cases: { id: string; is_heinous: boolean | null; current_status: string | null; ipc_sections: string[] | null }[];
   attendance_records: { attendance_percent: number | null; questions_asked: number | null; debates_participated: number | null }[];
   assets_declarations: { total_assets: number | null; net_worth: number | null; declaration_year: number }[];
 }
