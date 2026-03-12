@@ -1,17 +1,22 @@
 """
-PRS Legislative Research Attendance Spider — Phase 2.
+PRS Legislative Research Attendance Spider.
 Scrapes prsindia.org/mptrack for parliamentary performance data.
+
+Strategy:
+  1. Requests all pages of PRS MP Track upfront (per-page=50)
+  2. Visits each MP's individual page for detailed stats
+  3. Matches MP names to our DB via the pipeline
+
+Previous bug: per-page=9 + undefined `seen_hrefs` caused pagination
+to crash after page 1, yielding only ~66 MPs. Fixed by:
+  - Using per-page=50 (was 9)
+  - Requesting all pages upfront instead of following pagination links
+  - Tracking seen hrefs to avoid duplicates
 
 Usage:
   scrapy crawl prs_attendance                    # 18th Lok Sabha (default)
   scrapy crawl prs_attendance -a dry_run=true    # dry run
   scrapy crawl prs_attendance -a limit=10        # test with 10 MPs
-
-Data extracted per MP:
-  - Overall attendance %
-  - Debates participated
-  - Questions asked
-  - Private member bills introduced
 """
 import re
 import logging
@@ -24,7 +29,9 @@ from scrapy.http import Response
 logger = logging.getLogger(__name__)
 
 PRS_BASE = "https://prsindia.org"
-LIST_URL = f"{PRS_BASE}/mptrack?slug1=18th-lok-sabha&page=1&per-page=9"
+# per-page=50 to fetch more per request (was 9, causing only page 1 to work)
+LIST_URL_TPL = f"{PRS_BASE}/mptrack?slug1=18th-lok-sabha&page={{page}}&per-page=50"
+MAX_PAGES = 15  # 543 / 50 = ~11, cap at 15 for safety
 
 
 class PrsAttendanceSpider(scrapy.Spider):
@@ -36,7 +43,6 @@ class PrsAttendanceSpider(scrapy.Spider):
         "DOWNLOAD_DELAY": 1.5,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 2,
-        "DEPTH_LIMIT": 0,
     }
 
     def __init__(self, dry_run: str = "false", limit: str = "0", **kwargs):
@@ -44,28 +50,37 @@ class PrsAttendanceSpider(scrapy.Spider):
         self.dry_run = dry_run.lower() == "true"
         self.limit = int(limit)
         self._count = 0
+        self._seen_hrefs: set[str] = set()
 
     def start_requests(self):
-        yield scrapy.Request(LIST_URL, callback=self.parse_list, meta={"page": 1})
+        # Request all pages upfront — PRS serves server-rendered HTML for each page
+        for page in range(1, MAX_PAGES + 1):
+            if self.limit and self._count >= self.limit:
+                return
+            url = LIST_URL_TPL.format(page=page)
+            yield scrapy.Request(url, callback=self.parse_list, meta={"page": page})
 
     def parse_list(self, response: Response) -> Generator:
         """Parse MP list page. Extract links to individual MP pages."""
-        # Find all MP profile links: /mptrack/18th-lok-sabha/mp-slug
-        # Each MP has 2 links (image + text) — collect name from text link
-        mp_data = {}  # href → name
+        mp_data: dict[str, str] = {}  # href → name
         for link in response.css("a[href*='/mptrack/18th-lok-sabha/']"):
             href = link.attrib.get("href", "")
             if not href or href.rstrip("/") == "/mptrack/18th-lok-sabha":
                 continue
+            href = href.rstrip("/")
             name = link.css("::text").get("").strip()
             if name and len(name) >= 3:
                 mp_data[href] = name
             elif href not in mp_data:
-                mp_data[href] = ""  # placeholder for image-only link
+                mp_data[href] = ""
 
+        found = 0
         for href, name in mp_data.items():
             if not name:
                 continue
+            if href in self._seen_hrefs:
+                continue
+            self._seen_hrefs.add(href)
             if self.limit and self._count >= self.limit:
                 return
 
@@ -76,32 +91,10 @@ class PrsAttendanceSpider(scrapy.Spider):
                 meta={"mp_name": name, "prs_url": url},
             )
             self._count += 1
+            found += 1
 
-        # Follow pagination: ul.pagination li a
-        current_page = response.meta.get("page", 1)
-        next_page = current_page + 1
-        # Look for next page link in pagination
-        next_link = None
-        for a in response.css("ul.pagination li a, li.next a, a.page-link"):
-            href = a.attrib.get("href", "")
-            text = a.css("::text").get("").strip().lower()
-            if "next" in text or f"page={next_page}" in href:
-                next_link = href
-                break
-
-        if not next_link:
-            # Construct next page URL directly
-            next_link = f"/mptrack?slug1=18th-lok-sabha&page={next_page}&per-page=9"
-            # Only follow if we found MPs on current page
-            if not seen_hrefs:
-                next_link = None
-
-        if next_link and (not self.limit or self._count < self.limit):
-            yield scrapy.Request(
-                urljoin(PRS_BASE, next_link),
-                callback=self.parse_list,
-                meta={"page": next_page},
-            )
+        page = response.meta.get("page", "?")
+        logger.info(f"Page {page}: {found} new MPs (total queued: {self._count})")
 
     def parse_mp_page(self, response: Response) -> dict[str, Any] | None:
         """Parse individual MP page for attendance and performance data."""
@@ -141,6 +134,20 @@ class PrsAttendanceSpider(scrapy.Spider):
         bills = self._extract_int(
             text, r"Private\s+Member.?s?\s+Bills?\s+Selected\s+MP\s+(\d+)"
         )
+
+        # Fallback patterns if PRS changed their page format
+        if attendance_pct is None:
+            attendance_pct = self._extract_float(
+                text, r"Attendance[:\s]+(\d+(?:\.\d+)?)\s*%"
+            )
+        if debates is None:
+            debates = self._extract_int(
+                text, r"Debates?\s*(?:Participated)?[:\s]+(\d+)"
+            )
+        if questions is None:
+            questions = self._extract_int(
+                text, r"Questions?\s*(?:Asked)?[:\s]+(\d+)"
+            )
 
         item = {
             "item_type": "attendance",

@@ -1,8 +1,14 @@
 """
-MPLAD Fund Usage Spider — Phase 3C.
-Scrapes MPLADS portal for MP-wise fund allocation and utilization data.
+MPLAD Fund Usage Spider.
+Scrapes MPLADS eSAKSHI dashboard for MP-wise fund allocation and utilization.
 
-Source: mplads.gov.in — constituency-wise fund data.
+Sources:
+  - Primary: mplads.mospi.gov.in (eSAKSHI portal, 2023-24 onwards)
+  - Fallback: mplads.gov.in MP-wise reports page
+  - Alternative: data.gov.in CSV dataset (12th-16th Lok Sabha historical)
+
+Note: The old mplads.gov.in/MPLADS/SearchConstituencyMP.do endpoint is dead.
+      eSAKSHI (launched April 2023) replaced the old system.
 
 Usage:
   scrapy crawl mplad                      # all Lok Sabha MPs
@@ -19,15 +25,23 @@ from scrapy.http import Response
 
 logger = logging.getLogger(__name__)
 
-MPLAD_BASE = "https://www.mplads.gov.in"
-MPLAD_SEARCH = f"{MPLAD_BASE}/MPLADS/SearchConstituencyMP.do"
+# eSAKSHI dashboard (new system since April 2023)
+ESAKSHI_BASE = "https://mplads.mospi.gov.in"
+ESAKSHI_DASHBOARD = f"{ESAKSHI_BASE}/digigov/dashboard.html"
+
+# Old portal reports page (fallback)
+MPLAD_OLD_REPORTS = "https://www.mplads.gov.in/mplads/AuthenticatedPages/Reports/Citizen/rptDetailsSummary.aspx"
 
 
 class MpladSpider(scrapy.Spider):
-    """Scrapes MPLADS portal for fund utilization data."""
+    """Scrapes MPLADS portals for fund utilization data."""
 
     name = "mplad"
-    allowed_domains = ["mplads.gov.in", "www.mplads.gov.in"]
+    allowed_domains = [
+        "mplads.gov.in",
+        "www.mplads.gov.in",
+        "mplads.mospi.gov.in",
+    ]
     custom_settings = {
         "DOWNLOAD_DELAY": 3.0,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
@@ -40,6 +54,7 @@ class MpladSpider(scrapy.Spider):
         self.dry_run = dry_run.lower() == "true"
         self.limit = int(limit)
         self._count = 0
+        self._politician_map: dict[str, str] = {}  # constituency(lower) → politician_id
 
     def start_requests(self) -> Generator:
         from dotenv import load_dotenv
@@ -62,46 +77,127 @@ class MpladSpider(scrapy.Spider):
             logger.warning("No active Lok Sabha MPs in DB")
             return
 
-        logger.info(f"Searching MPLAD data for {len(politicians)} MPs")
-
+        # Build constituency → politician_id map for matching
         for mp in politicians:
-            if self.limit and self._count >= self.limit:
-                return
+            c = (mp.get("constituency") or "").strip().lower()
+            if c:
+                self._politician_map[c] = mp["id"]
 
-            constituency = mp.get("constituency", "")
-            state = mp.get("state", "")
-            if not constituency:
+        logger.info(f"Loaded {len(politicians)} Lok Sabha MPs for MPLAD matching")
+
+        # Try eSAKSHI dashboard first
+        yield scrapy.Request(
+            ESAKSHI_DASHBOARD,
+            callback=self.parse_esakshi_dashboard,
+            errback=self.handle_esakshi_error,
+        )
+
+    def handle_esakshi_error(self, failure):
+        """If eSAKSHI fails, fall back to old portal."""
+        logger.warning(f"eSAKSHI dashboard unreachable: {failure.value}")
+        logger.info("Trying old MPLADS reports page as fallback...")
+        yield scrapy.Request(
+            MPLAD_OLD_REPORTS,
+            callback=self.parse_old_reports,
+        )
+
+    def parse_esakshi_dashboard(self, response: Response) -> Generator:
+        """Parse the eSAKSHI dashboard page for fund data or API endpoints."""
+        # eSAKSHI is a JS-heavy React/Angular app — check if any data is
+        # embedded in the initial HTML or if we can find API endpoints
+        body = response.text
+
+        # Look for embedded JSON data or API URLs
+        api_urls = re.findall(r'(https?://[^"\']+/api/[^"\']+)', body)
+        if api_urls:
+            for api_url in api_urls[:5]:
+                logger.info(f"Found eSAKSHI API endpoint: {api_url}")
+                yield scrapy.Request(
+                    api_url,
+                    callback=self.parse_esakshi_api,
+                )
+            return
+
+        # Check for any HTML tables with fund data
+        tables = response.css("table")
+        if tables:
+            yield from self._parse_fund_tables(response, tables)
+            return
+
+        logger.warning(
+            "eSAKSHI dashboard is JS-rendered with no embedded data. "
+            "Consider using Playwright for JS execution, or download "
+            "MPLAD CSV from data.gov.in manually and import via: "
+            "scrapy crawl mplad -a csv_path=/path/to/mplad_data.csv"
+        )
+        # Fall back to old portal
+        yield scrapy.Request(
+            MPLAD_OLD_REPORTS,
+            callback=self.parse_old_reports,
+        )
+
+    def parse_esakshi_api(self, response: Response) -> Generator:
+        """Parse eSAKSHI API JSON response."""
+        import json
+        try:
+            data = json.loads(response.text)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(f"Failed to parse eSAKSHI API response: {response.url}")
+            return
+
+        # Try to extract fund data from API response
+        records = data if isinstance(data, list) else data.get("data", data.get("records", []))
+        if not isinstance(records, list):
+            return
+
+        for record in records:
+            constituency = (record.get("constituency", "") or "").strip().lower()
+            politician_id = self._politician_map.get(constituency)
+            if not politician_id:
                 continue
 
-            yield scrapy.FormRequest(
-                MPLAD_SEARCH,
-                formdata={
-                    "constituency": constituency,
-                    "state": state,
-                },
-                callback=self.parse_fund_data,
-                meta={
-                    "politician_id": mp["id"],
-                    "politician_name": mp["name"],
-                    "constituency": constituency,
-                },
-            )
-            self._count += 1
+            item = {
+                "item_type": "fund_usage",
+                "politician_id": politician_id,
+                "fund_type": "mplad",
+                "financial_year": record.get("financial_year") or record.get("fy"),
+                "total_allocated": self._safe_float(record.get("entitled") or record.get("allocated")),
+                "total_released": self._safe_float(record.get("released")),
+                "total_utilized": self._safe_float(record.get("utilized") or record.get("expenditure")),
+                "source_url": response.url,
+            }
 
-    def parse_fund_data(self, response: Response) -> Generator:
-        """Parse MPLAD fund utilization page."""
-        politician_id = response.meta["politician_id"]
-        politician_name = response.meta["politician_name"]
+            # Calculate utilization percent
+            if item["total_allocated"] and item["total_utilized"]:
+                item["utilization_percent"] = round(
+                    item["total_utilized"] / item["total_allocated"] * 100, 1
+                )
 
-        # Look for fund tables with allocation/release/utilization data
-        for table in response.css("table"):
+            if item.get("financial_year"):
+                if self.dry_run:
+                    logger.info(f"[DRY RUN] {constituency} | FY {item['financial_year']}")
+                yield item
+
+    def parse_old_reports(self, response: Response) -> Generator:
+        """Parse the old mplads.gov.in reports page."""
+        tables = response.css("table")
+        if tables:
+            yield from self._parse_fund_tables(response, tables)
+        else:
+            logger.warning("Old MPLADS reports page returned no tables. Portal may be down.")
+
+    def _parse_fund_tables(self, response: Response, tables) -> Generator:
+        """Parse HTML tables with fund allocation/utilization data."""
+        for table in tables:
             rows = table.css("tr")
             if len(rows) < 2:
                 continue
 
-            # Check if this is a fund data table
             header_text = " ".join(rows[0].css("::text").getall()).lower()
-            if not any(kw in header_text for kw in ["allocated", "released", "utilised", "utiliz"]):
+            if not any(kw in header_text for kw in [
+                "allocated", "released", "utilised", "utiliz",
+                "entitled", "sanctioned", "expenditure",
+            ]):
                 continue
 
             for tr in rows[1:]:
@@ -115,6 +211,18 @@ class MpladSpider(scrapy.Spider):
                 if not fund_data:
                     continue
 
+                # Try to match constituency from row text
+                constituency = None
+                for text in all_texts:
+                    c = text.strip().lower()
+                    if c in self._politician_map:
+                        constituency = c
+                        break
+
+                politician_id = self._politician_map.get(constituency) if constituency else None
+                if not politician_id:
+                    continue
+
                 item = {
                     "item_type": "fund_usage",
                     "politician_id": politician_id,
@@ -125,7 +233,7 @@ class MpladSpider(scrapy.Spider):
 
                 if self.dry_run:
                     logger.info(
-                        f"[DRY RUN] {politician_name} | "
+                        f"[DRY RUN] {constituency} | "
                         f"FY {fund_data.get('financial_year')} | "
                         f"Utilization: {fund_data.get('utilization_percent', 'N/A')}%"
                     )
@@ -172,4 +280,14 @@ class MpladSpider(scrapy.Spider):
         try:
             return float(nums) if nums else None
         except ValueError:
+            return None
+
+    @staticmethod
+    def _safe_float(value) -> float | None:
+        """Safely convert a value to float."""
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
             return None
