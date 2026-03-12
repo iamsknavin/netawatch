@@ -38,14 +38,15 @@ from parsers.cases_parser import parse_case_row, parse_ipc_sections
 logger = logging.getLogger(__name__)
 
 # MyNeta election URLs
+# NOTE: MyNeta has no current Rajya Sabha page (rajyasabha2024 is 404).
+# RS members are elected by state legislatures, not directly by voters,
+# so MyNeta doesn't track them. RS data needs a different source (Sansad.in).
 ELECTION_URLS = {
     "lok_sabha": "https://www.myneta.info/LokSabha2024/",
-    "rajya_sabha": "https://www.myneta.info/rajyasabha2024/",
 }
 
 DECLARATION_YEARS = {
     "lok_sabha": 2024,
-    "rajya_sabha": 2024,
 }
 
 # State assembly elections — recent winners pages
@@ -541,14 +542,21 @@ class MyNetaSpider(scrapy.Spider):
         "court": "court_name",
         "case no": "case_number",
         "case number": "case_number",
+        "fir no": "case_number",
+        "fir": "case_number",
         "case type": "case_description",
         "description": "case_description",
         "details": "case_description",
+        "other details": "case_description",
         "status": "status",
         "stage": "status",
+        "charges framed": "_charges_framed",
+        "serial": "_serial",
+        "sr": "_serial",
         "penalty": "_penalty",
         "fine": "_penalty",
         "punishment": "_penalty",
+        "appeal": "_appeal",
     }
 
     def _detect_column_map(self, header_row) -> dict[int, str]:
@@ -572,6 +580,11 @@ class MyNetaSpider(scrapy.Spider):
         for table in response.css("table"):
             table_text = table.get().lower()
             if not ("criminal" in table_text or "case" in table_text or "ipc" in table_text):
+                continue
+
+            # Skip the "Other Elections" summary table which has
+            # "Declared Assets | Declared Cases" — NOT actual criminal case data
+            if "other election" in table_text or "declared assets" in table_text or "declared cases" in table_text:
                 continue
 
             rows = table.css("tr")

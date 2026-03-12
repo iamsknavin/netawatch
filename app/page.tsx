@@ -6,6 +6,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { SearchBar } from "@/components/SearchBar";
 import { IndiaMap } from "@/components/IndiaMap";
 import { PartyBadge } from "@/components/politician/PartyBadge";
+import { ParliamentHemicycle } from "@/components/ParliamentHemicycle";
+import { computeHemicycleLayout } from "@/lib/hemicycle-layout";
 import type { PlatformStats } from "@/types";
 
 export const revalidate = 3600; // revalidate every hour
@@ -117,6 +119,29 @@ interface RecentUpdate {
   parties: { name: string; abbreviation: string | null } | null;
 }
 
+async function getParliamentSeats() {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("politicians")
+    .select("parties(abbreviation)")
+    .eq("house", "lok_sabha")
+    .eq("is_active", true)
+    .eq("election_status", "won");
+
+  if (!data) return [];
+
+  const counts: Record<string, number> = {};
+  for (const row of data as { parties: { abbreviation: string | null } | null }[]) {
+    const abbr = row.parties?.abbreviation ?? "IND";
+    counts[abbr] = (counts[abbr] ?? 0) + 1;
+  }
+
+  return Object.entries(counts).map(([abbreviation, count]) => ({
+    abbreviation,
+    count,
+  }));
+}
+
 async function getRecentUpdates(): Promise<RecentUpdate[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
@@ -129,51 +154,71 @@ async function getRecentUpdates(): Promise<RecentUpdate[]> {
 }
 
 export default async function HomePage() {
-  const [stats, topParties, recentUpdates] = await Promise.all([
+  const [stats, topParties, recentUpdates, partySeats] = await Promise.all([
     getPlatformStats(),
     getTopParties(),
     getRecentUpdates(),
+    getParliamentSeats(),
   ]);
+
+  const { seats, coalitionStats, totalSeats } =
+    computeHemicycleLayout(partySeats);
 
   return (
     <div>
       {/* Hero */}
       <section className="border-b border-border bg-surface">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-          <div className="max-w-3xl">
-            <p className="font-mono text-accent text-xs uppercase tracking-widest mb-4">
-              Indian Politician Transparency Platform
-            </p>
-            <h1 className="text-3xl sm:text-5xl font-bold text-text-primary mb-4 leading-tight">
-              Every rupee.
-              <br />
-              Every case.
-              <br />
-              Every vote.
-            </h1>
-            <p className="text-text-secondary text-sm sm:text-base mb-8 max-w-xl leading-relaxed">
-              Public record — sourced from mandatory ECI affidavits,
-              parliamentary attendance data, and criminal court disclosures.
-            </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <p className="font-mono text-accent text-xs uppercase tracking-widest mb-4">
+                Indian Politician Transparency Platform
+              </p>
+              <h1 className="text-3xl sm:text-5xl font-bold text-text-primary mb-4 leading-tight">
+                Every rupee.
+                <br />
+                Every case.
+                <br />
+                Every vote.
+              </h1>
+              <p className="text-text-secondary text-sm sm:text-base mb-8 max-w-xl leading-relaxed">
+                Public record — sourced from mandatory ECI affidavits,
+                parliamentary attendance data, and criminal court disclosures.
+              </p>
 
-            <div className="max-w-xl">
-              <SearchBar autoFocus />
+              <div className="max-w-xl">
+                <SearchBar autoFocus />
+              </div>
+
+              <div className="flex flex-wrap gap-4 mt-6">
+                <Link
+                  href="/politicians"
+                  className="font-mono text-sm border border-accent text-accent px-4 py-2 hover:bg-accent hover:text-bg transition-colors"
+                >
+                  Browse All MPs →
+                </Link>
+                <Link
+                  href="/about"
+                  className="font-mono text-sm border border-border text-text-secondary px-4 py-2 hover:border-text-secondary transition-colors"
+                >
+                  How it works
+                </Link>
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 mt-6">
-              <Link
-                href="/politicians"
-                className="font-mono text-sm border border-accent text-accent px-4 py-2 hover:bg-accent hover:text-bg transition-colors"
-              >
-                Browse All MPs →
-              </Link>
-              <Link
-                href="/about"
-                className="font-mono text-sm border border-border text-text-secondary px-4 py-2 hover:border-text-secondary transition-colors"
-              >
-                How it works
-              </Link>
-            </div>
+            {/* Parliament Hemicycle */}
+            {totalSeats > 0 && (
+              <div className="hidden lg:block">
+                <p className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-3 text-center">
+                  18th Lok Sabha
+                </p>
+                <ParliamentHemicycle
+                  seats={seats}
+                  coalitionStats={coalitionStats}
+                  totalSeats={totalSeats}
+                />
+              </div>
+            )}
           </div>
         </div>
       </section>
