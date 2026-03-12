@@ -18,7 +18,7 @@ export function CorruptionSignalBadge({
   signals,
   className,
 }: CorruptionSignalBadgeProps) {
-  // Phase 2 feature — render empty state cleanly in Phase 1
+  // Only render when corruption signals feature is enabled
   if (!PHASE_CONFIG.features.corruption_signals) {
     return null;
   }

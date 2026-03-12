@@ -57,7 +57,7 @@ export function Header() {
               API
             </Link>
             <a
-              href="https://github.com/netawatch/netawatch"
+              href="https://github.com/iamsknavin/netawatch"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-accent transition-colors font-mono text-2xs border border-border px-2 py-1 rounded-sm"

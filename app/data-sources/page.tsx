@@ -8,12 +8,16 @@ export const revalidate = 3600;
 
 async function getDataStats() {
   const supabase = await createServerClient();
-  const [politicians, cases, assets, parties, attendance] = await Promise.all([
+  const [politicians, cases, assets, parties, attendance, controversies, fundUsage, companyInterests, tenders] = await Promise.all([
     supabase.from("politicians").select("id, updated_at", { count: "exact" }),
     supabase.from("criminal_cases").select("id", { count: "exact" }),
     supabase.from("assets_declarations").select("id", { count: "exact" }),
     supabase.from("parties").select("id", { count: "exact" }),
     supabase.from("attendance_records").select("id", { count: "exact" }),
+    supabase.from("controversies").select("id", { count: "exact" }),
+    supabase.from("fund_usage").select("id", { count: "exact" }),
+    supabase.from("company_interests").select("id", { count: "exact" }),
+    supabase.from("govt_tenders").select("id", { count: "exact" }),
   ]);
 
   const politicianRows = politicians.data as { id: string; updated_at: string }[] | null;
@@ -31,6 +35,10 @@ async function getDataStats() {
     assets_declarations: assets.count ?? 0,
     parties: parties.count ?? 0,
     attendance: attendance.count ?? 0,
+    controversies: controversies.count ?? 0,
+    fund_usage: fundUsage.count ?? 0,
+    company_interests: companyInterests.count ?? 0,
+    govt_tenders: tenders.count ?? 0,
     lastScraped,
   };
 }
@@ -75,11 +83,11 @@ export default async function DataSourcesPage() {
                 { table: "Criminal Cases", count: stats.criminal_cases, source: "ECI Affidavits (via MyNeta)", updated: stats.lastScraped },
                 { table: "Asset Declarations", count: stats.assets_declarations, source: "ECI Affidavits (via MyNeta)", updated: stats.lastScraped },
                 { table: "Parties", count: stats.parties, source: "Manual + ECI", updated: "Seed data" },
-                { table: "Attendance Records", count: stats.attendance, source: "PRS India (Phase 2)", updated: "Pending" },
-                { table: "Company Interests", count: 0, source: "MCA21 (Phase 2)", updated: "Pending" },
-                { table: "Govt Tenders", count: 0, source: "GeM / CPPP (Phase 2)", updated: "Pending" },
-                { table: "Fund Usage", count: 0, source: "MPLAD Portal (Phase 3)", updated: "Pending" },
-                { table: "Controversies", count: 0, source: "News (Phase 3)", updated: "Pending" },
+                { table: "Attendance Records", count: stats.attendance, source: "PRS Legislative Research", updated: stats.lastScraped },
+                { table: "Controversies", count: stats.controversies, source: "Google News RSS", updated: stats.controversies > 0 ? stats.lastScraped : "Awaiting scrape" },
+                { table: "Fund Usage (MPLAD)", count: stats.fund_usage, source: "MPLADS Portal", updated: stats.fund_usage > 0 ? stats.lastScraped : "Awaiting scrape" },
+                { table: "Company Interests", count: stats.company_interests, source: "MCA21 / Zaubacorp", updated: stats.company_interests > 0 ? stats.lastScraped : "Awaiting scrape" },
+                { table: "Govt Tenders", count: stats.govt_tenders, source: "GeM Portal", updated: stats.govt_tenders > 0 ? stats.lastScraped : "Awaiting scrape" },
               ].map((row) => (
                 <tr key={row.table}>
                   <td className="font-mono text-text-primary">{row.table}</td>
@@ -138,13 +146,16 @@ export default async function DataSourcesPage() {
         </h2>
         <div className="space-y-2 text-sm text-text-secondary">
           <p>
-            <strong className="text-text-primary">Phase 1:</strong> Data is scraped manually before elections and updated on demand. Run the scraper locally to refresh.
+            <strong className="text-text-primary">Politicians & Assets:</strong> Scraped from MyNeta after each election cycle. Updated on demand.
           </p>
           <p>
-            <strong className="text-text-primary">Phase 2:</strong> Celery + Redis scheduled scraping (weekly for MyNeta, monthly for MCA21/GeM).
+            <strong className="text-text-primary">Attendance:</strong> Pulled from PRS India per parliamentary session.
           </p>
           <p>
-            <strong className="text-text-primary">Phase 3:</strong> eCourts live tracking + daily news controversy pipeline.
+            <strong className="text-text-primary">Controversies:</strong> Google News RSS monitored daily via scheduled pipeline.
+          </p>
+          <p>
+            <strong className="text-text-primary">Court Cases:</strong> eCourts case status checked periodically for linked cases.
           </p>
         </div>
       </section>

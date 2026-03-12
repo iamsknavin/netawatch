@@ -675,7 +675,7 @@ function TabLayout({
         )}
       </section>
 
-      {/* Tab 5: Companies (Phase 2) */}
+      {/* Tab 5: Companies */}
       <section id="companies" className="mb-16 scroll-mt-20">
         <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest mb-6">
           Company Interests & Government Tenders

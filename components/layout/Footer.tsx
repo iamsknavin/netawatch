@@ -93,7 +93,7 @@ export function Footer() {
 
         <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <p className="text-text-muted text-2xs font-mono">
-            MIT License · Open Source · Phase 3
+            MIT License · Open Source
           </p>
           <p className="text-text-muted text-2xs font-mono">
             Not affiliated with the Government of India

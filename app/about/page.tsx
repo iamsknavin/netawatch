@@ -41,15 +41,21 @@ export default function AboutPage() {
 
       <section className="mb-10 space-y-4">
         <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest">
-          What We Track (Phase 1)
+          What We Track
         </h2>
         <ul className="space-y-2 text-sm text-text-secondary">
           {[
             "Lok Sabha MPs (545 constituencies)",
-            "Rajya Sabha MPs (245 seats)",
+            "State MLAs (Vidhan Sabha elections)",
             "Asset declarations from ECI affidavits",
-            "Criminal case disclosures",
+            "Criminal case disclosures with IPC sections",
             "Party affiliation and election history",
+            "Parliamentary attendance (PRS India)",
+            "Corruption risk signals (automated)",
+            "News controversy tracking",
+            "eCourts live case status",
+            "MPLAD fund utilization",
+            "Public REST API for researchers and journalists",
           ].map((item) => (
             <li key={item} className="flex items-start gap-2">
               <span className="text-accent font-mono mt-0.5">›</span>
@@ -61,27 +67,21 @@ export default function AboutPage() {
 
       <section className="mb-10 space-y-4">
         <h2 className="font-mono text-text-secondary text-xs uppercase tracking-widest">
-          Coming Soon
+          Coming Next
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { phase: 2, items: ["State MLAs (all states)", "Company ownership (MCA21)", "Government tender tracking", "Automated corruption signal flags"] },
-            { phase: 3, items: ["MPLAD/MLALAD fund tracking", "eCourts live case status", "News controversy tracker", "Public API for journalists"] },
-          ].map(({ phase, items }) => (
-            <div key={phase} className="bg-surface border border-border rounded-sm p-4">
-              <p className="font-mono text-2xs text-text-muted uppercase tracking-widest mb-3">
-                Phase {phase}
-              </p>
-              <ul className="space-y-1.5 text-xs text-text-secondary">
-                {items.map((item) => (
-                  <li key={item} className="flex items-start gap-1.5">
-                    <span className="text-text-muted mt-0.5">·</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="bg-surface border border-border rounded-sm p-4">
+          <ul className="space-y-1.5 text-xs text-text-secondary">
+            {[
+              "Company ownership & directorship tracking (MCA21)",
+              "Government tender conflict-of-interest detection (GeM)",
+              "Rajya Sabha member data (via Sansad.in)",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-1.5">
+                <span className="text-text-muted mt-0.5">·</span>
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -152,7 +152,7 @@ export default function AboutPage() {
         </p>
         <div className="flex gap-3">
           <a
-            href="https://github.com/netawatch/netawatch"
+            href="https://github.com/iamsknavin/netawatch"
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-sm border border-accent text-accent px-4 py-2 hover:bg-accent hover:text-bg transition-colors"

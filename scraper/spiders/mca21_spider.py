@@ -1,16 +1,16 @@
 """
-MCA21 Company Interests Spider — Phase 2B.
-Looks up politician-linked companies via Ministry of Corporate Affairs data.
+Company Interests Spider — scrapes politician-linked business directorships.
 
-Strategy:
-  1. Fetches all politicians from DB
-  2. Searches for director records matching politician names
-  3. Extracts company details (CIN, role, status)
-  4. Cross-references with government tenders for conflict detection
+Strategy (no paid API needed):
+  1. MyNeta RS Interest declarations: myneta.info/InterestbyRajyasabhaMember/
+     - Lists directorships, shareholdings, remunerative activities
+  2. MyNeta affidavit profession fields for LS/MLA candidates
+     - Self-declared professions like "Business", "Directorship"
+  3. Future: MCA V3 Director Master Data (requires captcha solving)
 
-Note: MCA21 portal requires captcha for direct access.
-      This spider uses OpenCorporates API as a fallback when configured.
-      Set OPENCORPORATES_API_KEY in .env for live data.
+Sources:
+  - MyNeta "Declaration of Interests by Rajya Sabha Member"
+  - MyNeta candidate affidavit pages (profession field)
 
 Usage:
   scrapy crawl mca21                     # all politicians
@@ -21,44 +21,36 @@ import logging
 import os
 import re
 from typing import Any, Generator
-from urllib.parse import quote
+from urllib.parse import urljoin
 
 import scrapy
 from scrapy.http import Response
 
 logger = logging.getLogger(__name__)
 
-OPENCORPORATES_BASE = "https://api.opencorporates.com/v0.4"
+RS_INTERESTS_URL = "https://myneta.info/InterestbyRajyasabhaMember/"
 
 
 class Mca21Spider(scrapy.Spider):
-    """Searches company registries for politician-linked directorships."""
+    """Scrapes company/business interests from MyNeta interest declarations."""
 
     name = "mca21"
-    allowed_domains = ["api.opencorporates.com"]
+    allowed_domains = ["myneta.info"]
     custom_settings = {
         "DOWNLOAD_DELAY": 2.0,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
-        "CONCURRENT_REQUESTS": 1,
+        "CONCURRENT_REQUESTS": 2,
     }
 
     def __init__(self, dry_run: str = "false", limit: str = "0", **kwargs):
         super().__init__(**kwargs)
         self.dry_run = dry_run.lower() == "true"
         self.limit = int(limit)
-        self.api_key = os.environ.get("OPENCORPORATES_API_KEY", "")
         self._count = 0
+        self._politician_map: dict[str, str] = {}  # name -> politician_id
 
     def start_requests(self) -> Generator:
-        if not self.api_key:
-            logger.warning(
-                "OPENCORPORATES_API_KEY not set. "
-                "Set it in .env to enable company lookups. "
-                "Spider will exit."
-            )
-            return
-
-        # Load politicians from DB via pipeline
+        # Load politicians from DB to match names
         from dotenv import load_dotenv
         load_dotenv()
         from supabase import create_client
@@ -70,74 +62,138 @@ class Mca21Spider(scrapy.Spider):
             return
 
         sb = create_client(url, key)
-        result = sb.table("politicians").select("id, name, state").execute()
+        result = sb.table("politicians").select("id, name").execute()
 
         for politician in result.data or []:
+            # Normalize name for matching: "MODI, NARENDRA" -> "narendra modi"
+            name = politician["name"].strip().lower()
+            self._politician_map[name] = politician["id"]
+            # Also store reversed form (last, first -> first last)
+            parts = [p.strip() for p in name.split(",")]
+            if len(parts) == 2:
+                self._politician_map[f"{parts[1]} {parts[0]}"] = politician["id"]
+
+        logger.info(f"Loaded {len(result.data or [])} politicians for matching")
+
+        # Step 1: Scrape RS Interest declarations
+        yield scrapy.Request(
+            RS_INTERESTS_URL,
+            callback=self.parse_rs_interests_list,
+        )
+
+    def _match_politician(self, name: str) -> str | None:
+        """Fuzzy match a name to our politician database."""
+        normalized = name.strip().lower()
+        normalized = re.sub(r"\s+", " ", normalized)
+        # Strip common prefixes
+        normalized = re.sub(
+            r"^(shri|smt|dr|adv|prof|justice|sri|mr|mrs|ms)\.?\s+",
+            "",
+            normalized,
+        )
+
+        # Direct match
+        if normalized in self._politician_map:
+            return self._politician_map[normalized]
+
+        # Try partial matching (last name, first name)
+        for db_name, pid in self._politician_map.items():
+            if normalized in db_name or db_name in normalized:
+                return pid
+
+        return None
+
+    def parse_rs_interests_list(self, response: Response) -> Generator:
+        """Parse the list of RS members with interest declarations."""
+        # Find all member links
+        for link in response.css("table a[href*='candidate.php']"):
+            name = link.css("::text").get("").strip()
+            href = link.attrib.get("href", "")
+
+            if not name or not href:
+                continue
+
             if self.limit and self._count >= self.limit:
                 return
 
-            name = politician["name"]
-            # Search OpenCorporates for officers matching this name in India
-            search_url = (
-                f"{OPENCORPORATES_BASE}/officers/search"
-                f"?q={quote(name)}"
-                f"&jurisdiction_code=in"
-                f"&api_token={self.api_key}"
-            )
-
+            url = urljoin(response.url, href)
             yield scrapy.Request(
-                search_url,
-                callback=self.parse_officer_search,
-                meta={
-                    "politician_id": politician["id"],
-                    "politician_name": name,
-                    "politician_state": politician.get("state"),
-                },
+                url,
+                callback=self.parse_member_interests,
+                meta={"member_name": name},
             )
             self._count += 1
 
-    def parse_officer_search(self, response: Response) -> Generator:
-        """Parse OpenCorporates officer search results."""
-        import json
+    def parse_member_interests(self, response: Response) -> Generator:
+        """Parse individual member's interest declaration page."""
+        member_name = response.meta["member_name"]
+        politician_id = self._match_politician(member_name)
 
-        politician_id = response.meta["politician_id"]
-        politician_name = response.meta["politician_name"]
-
-        try:
-            data = json.loads(response.text)
-            officers = data.get("results", {}).get("officers", [])
-        except (json.JSONDecodeError, AttributeError):
-            logger.warning(f"Failed to parse response for {politician_name}")
+        if not politician_id:
+            logger.debug(f"No DB match for RS member: {member_name}")
             return
 
-        for officer_data in officers:
-            officer = officer_data.get("officer", {})
-            company = officer.get("company", {})
+        # Look for tables with directorship/company data
+        tables = response.css("table")
+        for table in tables:
+            table_text = table.css("::text").getall()
+            header_text = " ".join(table_text[:20]).lower()
 
-            if not company.get("name"):
-                continue
+            # Look for directorship tables
+            if any(
+                kw in header_text
+                for kw in [
+                    "directorship",
+                    "company",
+                    "shareholding",
+                    "remunerative",
+                    "business",
+                    "interest",
+                ]
+            ):
+                for row in table.css("tr")[1:]:  # Skip header
+                    cells = row.css("td::text, td *::text").getall()
+                    cells = [c.strip() for c in cells if c.strip()]
 
-            item = {
-                "item_type": "company_interest",
-                "politician_id": politician_id,
-                "politician_name": politician_name,
-                "company_name": company.get("name"),
-                "cin": company.get("company_number"),
-                "role": officer.get("position"),
-                "company_type": company.get("company_type"),
-                "company_status": company.get("current_status"),
-                "mca_data_url": company.get("opencorporates_url"),
-            }
+                    if len(cells) < 2:
+                        continue
 
-            if self.dry_run:
-                logger.info(
-                    f"[DRY RUN] {politician_name} → "
-                    f"{company.get('name')} ({officer.get('position')})"
-                )
-            else:
-                logger.info(
-                    f"✅ {politician_name} → "
-                    f"{company.get('name')} ({officer.get('position')})"
-                )
+                    # Try to extract company name and role
+                    company_name = cells[0] if cells else None
+                    role = cells[1] if len(cells) > 1 else "Director"
 
-            yield item
+                    # Skip if it looks like a header or empty
+                    if not company_name or company_name.lower() in (
+                        "company name",
+                        "name",
+                        "sr no",
+                        "sl no",
+                        "s.no",
+                    ):
+                        continue
+
+                    item = {
+                        "item_type": "company_interest",
+                        "politician_id": politician_id,
+                        "politician_name": member_name,
+                        "company_name": company_name,
+                        "role": role,
+                        "company_type": None,
+                        "company_status": None,
+                        "cin": None,
+                        "mca_data_url": None,
+                        "source_url": response.url,
+                    }
+
+                    if self.dry_run:
+                        logger.info(
+                            f"[DRY RUN] {member_name} → "
+                            f"{company_name} ({role})"
+                        )
+                    else:
+                        logger.info(
+                            f"Found: {member_name} → "
+                            f"{company_name} ({role})"
+                        )
+
+                    yield item

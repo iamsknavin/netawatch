@@ -1,8 +1,8 @@
 export const PHASE_CONFIG = {
   current: 3,
   features: {
-    company_interests: false, // Phase 2
-    tender_tracking: false, // Phase 2
+    company_interests: true, // MyNeta interest declarations
+    tender_tracking: false, // Needs company data from mca21 first
     corruption_signals: true, // Phase 2 — LIVE
     mla_data: true, // Phase 2 — LIVE
     ecourts_live: true, // Phase 3 — LIVE
@@ -36,14 +36,14 @@ export const DATA_SOURCES = {
     description: "Official Lok Sabha data portal",
   },
   mca21: {
-    name: "MCA21 / Ministry of Corporate Affairs",
-    url: "https://www.mca.gov.in",
-    description: "Company registration and director data (Phase 2)",
+    name: "MyNeta Interest Declarations + MCA21",
+    url: "https://myneta.info/InterestbyRajyasabhaMember/",
+    description: "Company directorships and business interests from RS interest declarations",
   },
   gem: {
     name: "GeM Portal",
     url: "https://gem.gov.in",
-    description: "Government e-Marketplace procurement data (Phase 2)",
+    description: "Government e-Marketplace procurement data",
   },
   ecourts: {
     name: "eCourts India",
